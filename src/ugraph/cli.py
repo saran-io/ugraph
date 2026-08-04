@@ -297,11 +297,15 @@ def cmd_ledger(args) -> int:
         items.sort(key=lambda i: -(i.age_days or 0))
 
     if args.write:
-        path = ledger_mod.write_report(cfg, ledger_mod.collect(cfg))
+        # The report is always the full ledger; a filtered view would be a report
+        # about a filter. Count what was written, not what the flags selected —
+        # "3 sources → ledger.md" on a file holding 150 is a lie about the artefact.
+        everything = ledger_mod.collect(cfg)
+        path = ledger_mod.write_report(cfg, everything)
         if args.json:
-            print(json.dumps({"path": str(path)}, indent=2))
+            print(json.dumps({"path": str(path), "sources": len(everything)}, indent=2))
         else:
-            print(f"{len(items)} sources → {path}")
+            print(f"{len(everything)} sources → {path}")
         return 0
 
     if args.json:
@@ -351,7 +355,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p.add_argument("--version", action="version", version=f"ugraph-kit {__version__}")
     p.add_argument("--kb", metavar="PATH",
-                   help="knowledge base root (default: ugraph.toml, $OKF_KB, or cwd)")
+                   help="knowledge base root (default: ugraph.toml, $UGRAPH_KB, or cwd)")
     sub = p.add_subparsers(dest="command", required=True)
 
     sp = sub.add_parser("init", help="scaffold a new knowledge base")

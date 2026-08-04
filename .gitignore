@@ -1,6 +1,6 @@
 __pycache__/
 *.py[cod]
-.venv/
+.venv*/
 venv/
 dist/
 build/
@@ -9,6 +9,8 @@ build/
 .ruff_cache/
 .DS_Store
 
-# working state — a KB's own .okf/ dir holds candidates, state and logs
-.okf/
+# working state — a KB's own .ugraph/ dir holds candidates, state and logs
+.ugraph/
 kb-graph.html
+*.canvas
+ugraph.toml

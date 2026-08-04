@@ -8,17 +8,18 @@ version = "0.1.0"
 description = "Build an agent-navigable knowledge base from a YouTube channel. Plain markdown, cited to the second, no database."
 readme = "README.md"
 requires-python = ">=3.10"
-license = { text = "MIT" }
+license = "MIT"
+license-files = ["LICENSE"]
 authors = [{ name = "Saran Santhanam" }]
 keywords = ["knowledge-base", "llm", "agents", "obsidian", "youtube", "rag", "okf", "second-brain"]
 
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
-    "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Topic :: Text Processing :: Markup :: Markdown",
 ]
 
@@ -42,6 +43,22 @@ ugraph = "ugraph.cli:main"
 [tool.hatch.build.targets.wheel]
 packages = ["src/ugraph"]
 
+# An explicit allow-list, never an exclude-list. The sdist previously inherited
+# everything not gitignored, which swept in a 613-file test virtualenv containing an
+# absolute symlink to a Python binary — making the archive refuse to extract, and
+# `pip install git+https://...` fail outright. Deny-lists fail open; this fails closed.
+[tool.hatch.build.targets.sdist]
+only-include = [
+    "src/ugraph",
+    "tests",
+    "skills",
+    "templates",
+    "README.md",
+    "LICENSE",
+    "CONTRIBUTING.md",
+    "pyproject.toml",
+]
+
 [tool.hatch.build.targets.wheel.force-include]
 "skills" = "ugraph/_bundled/skills"
 "templates" = "ugraph/_bundled/templates"
@@ -49,6 +66,27 @@ packages = ["src/ugraph"]
 [tool.ruff]
 line-length = 96
 target-version = "py310"
+
+[tool.ruff.lint]
+# Each of these is a deliberate choice, not debt. Silencing a rule without saying
+# why is how a lint config becomes noise nobody reads.
+ignore = [
+    # Local dates are correct here. A page's `created:` is the author's calendar day,
+    # not a UTC instant — a KB written at 9pm in Bengaluru is dated that day, and
+    # forcing UTC would file it under tomorrow.
+    "DTZ005", "DTZ007", "DTZ011",
+    # Bookkeeping and recovery paths deliberately swallow everything: a failed ledger
+    # write must not fail an ingest that already succeeded, and a truncated state file
+    # must not make a job unstartable. Each site carries a comment saying so.
+    "BLE001", "S110",
+    # subprocess return codes are inspected explicitly, with the stderr surfaced to
+    # the caller. `check=True` would raise past the error handling that exists.
+    "PLW1510",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests assert on internals and build deliberately malformed fixtures.
+"tests/*" = ["S101"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

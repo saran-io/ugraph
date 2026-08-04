@@ -133,12 +133,12 @@ class Page:
         return f"<Page {self.id} type={self.type}>"
 
 
-def iter_pages(config: Config, root: str | Path | None = None,
-               include_raw: bool = False) -> Iterator[Page]:
-    """Yield every OKF page under the KB (or a subdirectory of it).
+def page_paths(config: Config, root: str | Path | None = None,
+               include_raw: bool = False) -> Iterator[Path]:
+    """Yield the path of every page the KB considers content.
 
-    Skips reserved files (index.md, SCHEMA.md, README.md) and, unless asked,
-    the raw/ transcript tree.
+    Split out from `iter_pages` so a caller that needs to survive unparseable files —
+    the linter, chiefly — can walk paths itself and decide what a parse failure means.
     """
     root = Path(root) if root else config.kb
     raw_dir = config.raw_dir.resolve()
@@ -147,10 +147,27 @@ def iter_pages(config: Config, root: str | Path | None = None,
             continue
         if not include_raw and raw_dir in path.resolve().parents:
             continue
+        yield path
+
+
+def iter_pages(config: Config, root: str | Path | None = None,
+               include_raw: bool = False, strict: bool = True) -> Iterator[Page]:
+    """Yield every OKF page under the KB (or a subdirectory of it).
+
+    Skips reserved files (index.md, SCHEMA.md, README.md) and, unless asked,
+    the raw/ transcript tree.
+
+    `strict=True` raises on unparseable frontmatter. `strict=False` skips it — which
+    a caller must choose deliberately, because silently dropping pages from a
+    structural check produces a confident answer about a KB that was never fully read.
+    """
+    for path in page_paths(config, root, include_raw):
         try:
             yield Page(path, config)
-        except Exception as exc:  # malformed YAML — surfaced by the linter
-            raise ValueError(f"Cannot parse {path}: {exc}") from exc
+        except Exception as exc:  # malformed YAML
+            if strict:
+                raise ValueError(f"Cannot parse {path}: {exc}") from exc
+            continue
 
 
 def load_page(path: str | Path, config: Config) -> Page:

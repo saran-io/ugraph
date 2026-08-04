@@ -8,8 +8,8 @@ from __future__ import annotations
 
 import json
 
-from ugraph import indexes, ledger, status, store
 from tests.test_roundtrip import scaffold
+from ugraph import indexes, ledger, status, store
 
 
 def test_a_fully_processed_source_reaches_linked(tmp_path):

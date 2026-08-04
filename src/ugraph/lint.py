@@ -20,9 +20,8 @@ from collections import defaultdict
 from collections.abc import Iterable, Sequence
 from datetime import date, datetime, timedelta
 from pathlib import Path
-from typing import Optional
 
-from ugraph.config import RESERVED_NAMES, Config
+from ugraph.config import Config
 from ugraph.model import (
     CONDITIONAL_FIELDS,
     RELATION_HEADINGS,
@@ -35,10 +34,10 @@ from ugraph.model import (
     get_md_links,
     get_typed_edges,
     get_wikilinks,
-    iter_pages,
+    page_paths,
     resolve_md_link,
 )
-from ugraph.store import State, iter_md, log, read_md
+from ugraph.store import State, iter_md, log
 
 JOB_NAME = "lint"
 
@@ -124,7 +123,7 @@ def page_types(config: Config) -> dict:
 
 
 def check_frontmatter(config: Config, page: Page, f: Findings,
-                      domains: Optional[set] = None):
+                      domains: set | None = None):
     """Type declared, required fields present, closed vocabularies respected."""
     if domains is None:
         domains = valid_domains(config)
@@ -159,10 +158,8 @@ def check_frontmatter(config: Config, page: Page, f: Findings,
                 f"`{page.type}/{discriminator}` missing: {', '.join(missing_cond)}")
 
     # Closed vocabularies.
-    if page.type in {"concept", "entity"} and page.domain:
-        if page.domain not in domains:
-            f.error("taxonomy", rel,
-                    f"domain `{page.domain}` is not in the taxonomy")
+    if page.type in {"concept", "entity"} and page.domain and page.domain not in domains:
+        f.error("taxonomy", rel, f"domain `{page.domain}` is not in the taxonomy")
 
     if page.type == "concept":
         status = str(page.meta.get("status", "")).strip()
@@ -362,32 +359,26 @@ def check_staleness(config: Config, pages: Sequence[Page], f: Findings):
 # ---------------------------------------------------------------------------
 
 
-def load_pages(config: Config, f: Optional[Findings] = None) -> list[Page]:
+def load_pages(config: Config, f: Findings | None = None) -> list[Page]:
     """Every page in the KB, including raw transcripts.
 
-    Unparseable frontmatter is a finding, not a crash. The bad files are found in a
-    separate cheap pass because `iter_pages` is a generator: if it raised on the first
-    malformed file, every page after it would silently vanish from the lint. One extra
-    read per file is a fair price for reporting all of them.
-    """
-    if f is not None:
-        for path in iter_md(config.kb):
-            if path.name in RESERVED_NAMES:
-                continue
-            try:
-                read_md(path)
-            except Exception as exc:
-                f.error("parse", _rel(config, path), f"cannot parse frontmatter: {exc}")
+    Unparseable frontmatter is a finding, not a crash, and — this is the part that
+    matters — it must not stop the walk. An earlier version consumed a generator that
+    raised on the first bad file; because a raised generator cannot be resumed, every
+    page sorted after it silently vanished from the lint, and the tool then reported
+    PASS on a knowledge base it had stopped reading. A gate that fails open is worse
+    than no gate.
 
+    So this walks paths and constructs pages itself: one bad file costs one finding,
+    not the rest of the corpus.
+    """
     pages: list[Page] = []
-    walker = iter_pages(config, include_raw=True)
-    while True:
+    for path in page_paths(config, include_raw=True):
         try:
-            pages.append(next(walker))
-        except StopIteration:
-            break
-        except Exception:
-            break  # already reported above
+            pages.append(Page(path, config))
+        except Exception as exc:
+            if f is not None:
+                f.error("parse", _rel(config, path), f"cannot parse frontmatter: {exc}")
     return pages
 
 

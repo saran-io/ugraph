@@ -42,7 +42,6 @@ import unicodedata
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
 
 from ugraph import store
 
@@ -128,7 +127,7 @@ def _truncate(text: str, limit: int = QUOTE_DISPLAY_CHARS) -> str:
     return text if len(text) <= limit else text[: limit - 1].rstrip() + "…"
 
 
-def _seconds(stamp: object) -> Optional[int]:
+def _seconds(stamp: object) -> int | None:
     try:
         return store.parse_hhmmss(str(stamp))
     except (ValueError, AttributeError, TypeError):
@@ -150,15 +149,15 @@ class _Transcript:
     path: Path
     flat: str
     folded: str
-    starts: List[int]
-    stamps: List[int]
-    by_stamp: Dict[int, List[int]]
+    starts: list[int]
+    stamps: list[int]
+    by_stamp: dict[int, list[int]]
 
     def paragraph_at(self, offset: int) -> int:
         idx = bisect.bisect_right(self.starts, offset) - 1
         return max(0, min(idx, len(self.starts) - 1))
 
-    def paragraphs_spanning(self, start: int, end: int) -> List[int]:
+    def paragraphs_spanning(self, start: int, end: int) -> list[int]:
         first = self.paragraph_at(start)
         last = self.paragraph_at(max(start, end - 1))
         return list(range(first, last + 1))
@@ -174,9 +173,9 @@ class _Transcript:
         return self.stamps[-1] if self.stamps else 0
 
 
-def _parse_transcript(path: Path) -> Tuple[Optional[_Transcript], str]:
+def _parse_transcript(path: Path) -> tuple[_Transcript | None, str]:
     """Return (transcript, reason-if-none). Never raises."""
-    body: Optional[str] = None
+    body: str | None = None
     try:
         _, body = store.read_md(path)
     except Exception:  # malformed YAML header, encoding trouble — fall back to text
@@ -187,7 +186,7 @@ def _parse_transcript(path: Path) -> Tuple[Optional[_Transcript], str]:
     if body is None:
         return None, "cannot read transcript"
 
-    paragraphs: List[List] = []
+    paragraphs: list[list] = []
     for line in body.splitlines():
         match = _MARKER_RE.match(line)
         if match:
@@ -202,10 +201,10 @@ def _parse_transcript(path: Path) -> Tuple[Optional[_Transcript], str]:
     if not paragraphs:
         return None, "transcript contains no [HH:MM:SS] markers"
 
-    parts: List[str] = []
-    starts: List[int] = []
-    stamps: List[int] = []
-    by_stamp: Dict[int, List[int]] = {}
+    parts: list[str] = []
+    starts: list[int] = []
+    stamps: list[int] = []
+    by_stamp: dict[int, list[int]] = {}
     cursor = 0
     for seconds, text in paragraphs:
         norm = _normalize(text)
@@ -236,8 +235,8 @@ def _parse_transcript(path: Path) -> Tuple[Optional[_Transcript], str]:
 # ---------------------------------------------------------------------------
 
 
-def _occurrences(haystack: str, needle: str, limit: int = 64) -> List[int]:
-    found: List[int] = []
+def _occurrences(haystack: str, needle: str, limit: int = 64) -> list[int]:
+    found: list[int] = []
     start = 0
     while len(found) < limit:
         index = haystack.find(needle, start)
@@ -249,7 +248,7 @@ def _occurrences(haystack: str, needle: str, limit: int = 64) -> List[int]:
 
 
 def _nearest(transcript: _Transcript, positions: Sequence[int],
-             target_s: Optional[int]) -> int:
+             target_s: int | None) -> int:
     """Of several occurrences, the one closest to where the citation says it is.
     A phrase repeated later in a talk must not be reported as a timestamp error."""
     if target_s is None or len(positions) == 1:
@@ -313,10 +312,10 @@ class _Cache:
     """Per-run memo. Transcripts are parsed once even when fifty pages cite them."""
 
     def __init__(self) -> None:
-        self.transcripts: Dict[str, Tuple[Optional[_Transcript], str]] = {}
-        self.sources: Dict[str, dict] = {}
+        self.transcripts: dict[str, tuple[_Transcript | None, str]] = {}
+        self.sources: dict[str, dict] = {}
 
-    def transcript(self, path: Path) -> Tuple[Optional[_Transcript], str]:
+    def transcript(self, path: Path) -> tuple[_Transcript | None, str]:
         key = str(path)
         if key not in self.transcripts:
             if not path.is_file():
@@ -341,7 +340,7 @@ class _Cache:
 # ---------------------------------------------------------------------------
 
 
-def _candidate_transcript_path(config, path: Path, slug: str) -> Optional[Path]:
+def _candidate_transcript_path(config, path: Path, slug: str) -> Path | None:
     raw_dir = Path(config.raw_dir)
     if slug:
         guess = raw_dir / (slug + ".md")
@@ -355,7 +354,7 @@ def _candidate_transcript_path(config, path: Path, slug: str) -> Optional[Path]:
     return matches[0] if matches else None
 
 
-def verify_candidates(config) -> List[QuoteIssue]:
+def verify_candidates(config) -> list[QuoteIssue]:
     """Check every `candidates/*.json` against the transcript it was extracted from.
 
     Candidates are machine output, so this pass is strict. For each entry in
@@ -374,7 +373,7 @@ def verify_candidates(config) -> List[QuoteIssue]:
     citation, and inventing a `kind` for it would pollute a vocabulary that callers
     switch on.
     """
-    issues: List[QuoteIssue] = []
+    issues: list[QuoteIssue] = []
     directory = Path(config.candidates)
     if not directory.is_dir():
         return issues
@@ -409,7 +408,7 @@ def verify_candidates(config) -> List[QuoteIssue]:
                 source=slug or path.stem,
                 timestamp="",
                 quote="",
-                detail="{0} ({1} quote(s) unverifiable): {2}".format(
+                detail="{} ({} quote(s) unverifiable): {}".format(
                     _kb_rel(config, raw_path) if raw_path else "raw/?", len(quoted), reason),
             ))
             continue
@@ -421,8 +420,8 @@ def verify_candidates(config) -> List[QuoteIssue]:
 
 
 def _check_candidate_entry(config, entry: dict, transcript: _Transcript,
-                           file_rel: str, source: str) -> List[QuoteIssue]:
-    issues: List[QuoteIssue] = []
+                           file_rel: str, source: str) -> list[QuoteIssue]:
+    issues: list[QuoteIssue] = []
     quote = _normalize(entry.get("verbatim_quote"))
     if not quote:  # a quote of nothing matches everything; there is nothing to check
         return issues
@@ -489,8 +488,8 @@ def _check_candidate_entry(config, entry: dict, transcript: _Transcript,
             source=source,
             timestamp=stamp,
             quote=display,
-            detail="quote sits in the [{0}] paragraph of {1} ({2:+d}s from the cited "
-                   "timestamp)".format(store.hhmmss(actual), where, actual - target_s),
+            detail=f"quote sits in the [{store.hhmmss(actual)}] paragraph of {where} ({actual - target_s:+d}s from the cited "
+                   "timestamp)",
         ))
     return issues
 
@@ -517,7 +516,7 @@ def _strip_markdown(text: str) -> str:
     return _MD_EMPHASIS_RE.sub("", _MD_LINK_RE.sub(r"\1", text))
 
 
-def _paragraph_lines(lines: Sequence[str], index: int) -> Tuple[List[str], bool]:
+def _paragraph_lines(lines: Sequence[str], index: int) -> tuple[list[str], bool]:
     """The contiguous run of non-blank lines ending at `index`. Returns the lines and
     whether the whole run is a blockquote."""
     start = index
@@ -536,7 +535,7 @@ def _paragraph_lines(lines: Sequence[str], index: int) -> Tuple[List[str], bool]
 
 
 def _quotation_before(block: Sequence[str], is_quote: bool,
-                      citation_text: str) -> Optional[str]:
+                      citation_text: str) -> str | None:
     """The text this citation is citing, or None when we cannot tell.
 
     Two shapes are recognized, and only two:
@@ -576,7 +575,7 @@ def _quotation_before(block: Sequence[str], is_quote: bool,
     return None
 
 
-def _segments(quote: str) -> List[str]:
+def _segments(quote: str) -> list[str]:
     """Split an elided quote at its ellipses. Each surviving fragment is checked
     independently and in order; fragments too short to be distinctive are dropped."""
     parts = [p.strip(" ,;:-") for p in quote.split("...")]
@@ -594,7 +593,7 @@ def _source_slug(config, source_path: Path, meta: dict) -> str:
         return source_path.stem
 
 
-def _expected_transcript(source_path: Path, meta: dict) -> Tuple[Optional[Path], bool]:
+def _expected_transcript(source_path: Path, meta: dict) -> tuple[Path | None, bool]:
     """(path, expected). A hand-written page or an article has no transcript and that
     is not a defect; only a declared video is expected to have one."""
     raw_value = str(meta.get("raw") or "").strip()
@@ -608,7 +607,7 @@ def _expected_transcript(source_path: Path, meta: dict) -> Tuple[Optional[Path],
     return None, False
 
 
-def verify_pages(config) -> List[QuoteIssue]:
+def verify_pages(config) -> list[QuoteIssue]:
     """Check quotations on KB pages against the transcripts they cite.
 
     For every citation of the form
@@ -660,7 +659,7 @@ def verify_pages(config) -> List[QuoteIssue]:
     Comparison is whitespace- and glyph-normalized on both sides and case-insensitive;
     nothing else about either text is altered.
     """
-    issues: List[QuoteIssue] = []
+    issues: list[QuoteIssue] = []
     kb = Path(config.kb)
     if not kb.is_dir():
         return issues
@@ -690,8 +689,8 @@ def verify_pages(config) -> List[QuoteIssue]:
     return issues
 
 
-def _line_offsets(lines: Sequence[str]) -> List[int]:
-    offsets: List[int] = []
+def _line_offsets(lines: Sequence[str]) -> list[int]:
+    offsets: list[int] = []
     cursor = 0
     for line in lines:
         offsets.append(cursor)
@@ -701,8 +700,8 @@ def _line_offsets(lines: Sequence[str]) -> List[int]:
 
 def _check_citation(config, cache: _Cache, page: Path, file_rel: str,
                     lines: Sequence[str], line_starts: Sequence[int],
-                    match, reported_missing: set) -> List[QuoteIssue]:
-    issues: List[QuoteIssue] = []
+                    match, reported_missing: set) -> list[QuoteIssue]:
+    issues: list[QuoteIssue] = []
     stamp = match.group("stamp")
     target_s = _seconds(stamp)
 
@@ -774,8 +773,7 @@ def _check_citation(config, cache: _Cache, page: Path, file_rel: str,
         issues.append(QuoteIssue(
             kind="not-verbatim", file=location, source=source, timestamp=stamp,
             quote=display,
-            detail="not found in {0}: {1}".format(
-                where, _divergence_detail(haystack, first)),
+            detail=f"not found in {where}: {_divergence_detail(haystack, first)}",
         ))
         return issues
 
@@ -789,9 +787,8 @@ def _check_citation(config, cache: _Cache, page: Path, file_rel: str,
             issues.append(QuoteIssue(
                 kind="not-verbatim", file=location, source=source, timestamp=stamp,
                 quote=display,
-                detail="fragment {0} of the elided quote is not in {1} after the "
-                       "first: {2}".format(
-                           index, where, _divergence_detail(haystack[cursor:], folded)),
+                detail=f"fragment {index} of the elided quote is not in {where} after the "
+                       f"first: {_divergence_detail(haystack[cursor:], folded)}",
             ))
             return issues
         cursor = found + len(folded)
@@ -811,8 +808,8 @@ def _check_citation(config, cache: _Cache, page: Path, file_rel: str,
     issues.append(QuoteIssue(
         kind="timestamp-mismatch", file=location, source=source, timestamp=stamp,
         quote=display,
-        detail="quote appears at [{0}] in {1} ({2:+d}s from the cited "
-               "timestamp)".format(store.hhmmss(starts_at), where, starts_at - target_s),
+        detail=f"quote appears at [{store.hhmmss(starts_at)}] in {where} ({starts_at - target_s:+d}s from the cited "
+               "timestamp)",
     ))
     return issues
 
@@ -820,7 +817,7 @@ def _check_citation(config, cache: _Cache, page: Path, file_rel: str,
 # ---------------------------------------------------------------------------
 
 
-def verify(config) -> List[QuoteIssue]:
+def verify(config) -> list[QuoteIssue]:
     """Both passes. Candidates first — a defect there is upstream of the page it
     would become, and fixing it in order avoids chasing the same quote twice."""
     return verify_candidates(config) + verify_pages(config)

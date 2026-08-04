@@ -30,7 +30,7 @@ from __future__ import annotations
 
 import json
 import xml.etree.ElementTree as ET
-from typing import Any, Optional
+from typing import Any
 
 from ugraph.config import Config
 from ugraph.model import (
@@ -61,7 +61,7 @@ def _node_id(config: Config, page: Page) -> str:
 
 
 def build(config: Config, include_provenance: bool = True,
-          types: Optional[set[str]] = None) -> dict[str, Any]:
+          types: set[str] | None = None) -> dict[str, Any]:
     """Derive nodes and edges from the knowledge base.
 
     `include_provenance` keeps edges from concepts to the sources they cite. Those are
@@ -135,7 +135,10 @@ def build(config: Config, include_provenance: bool = True,
             edges.append({"source": src_id, "target": dst_id, "relation": relation})
 
     return {
-        "kb": str(config.kb),
+        # Deliberately the directory NAME, not the path. The README tells people to
+        # share these exports, and an absolute path publishes the operator's home
+        # directory along with the graph. Nothing downstream needs more than a label.
+        "kb": config.kb.name,
         "nodes": sorted(nodes, key=lambda n: n["id"]),
         "edges": sorted(edges, key=lambda e: (e["source"], e["target"], e["relation"])),
     }
@@ -146,7 +149,7 @@ def build(config: Config, include_provenance: bool = True,
 # ---------------------------------------------------------------------------
 
 
-def to_json(graph: dict[str, Any], indent: Optional[int] = 2) -> str:
+def to_json(graph: dict[str, Any], indent: int | None = 2) -> str:
     return json.dumps(graph, indent=indent, ensure_ascii=False)
 
 
@@ -216,8 +219,8 @@ def to_dot(graph: dict[str, Any]) -> str:
         return str(text).replace('"', '\\"')
 
     lines = ["digraph kb {", '  graph [rankdir=LR, overlap=false, splines=true];',
-             '  node [shape=box, style="rounded,filled", fontname="Helvetica",'
-             ' fontsize=10, fillcolor="#ffffff"];',
+             ('  node [shape=box, style="rounded,filled", fontname="Helvetica",'
+              ' fontsize=10, fillcolor="#ffffff"];'),
              '  edge [fontname="Helvetica", fontsize=8, color="#a0aec0"];']
 
     for node in graph["nodes"]:
@@ -320,7 +323,7 @@ def layout(graph: dict[str, Any], iterations: int = 420,
     return {nid: (round(pos[i][0]), round(pos[i][1])) for nid, i in index.items()}
 
 
-def find_vault_root(config: Config) -> Optional[Any]:
+def find_vault_root(config: Config) -> Any | None:
     """Walk up from the KB looking for `.obsidian`.
 
     Canvas stores *vault-relative* file paths, so a canvas written without knowing the
@@ -342,7 +345,7 @@ def find_vault_root(config: Config) -> Optional[Any]:
 
 
 def to_canvas(graph: dict[str, Any], config: Config,
-              vault_root: Optional[Any] = None) -> str:
+              vault_root: Any | None = None) -> str:
     """Obsidian Canvas (.canvas).
 
     Nodes are `file` nodes pointing at the real pages, so clicking one opens the note
@@ -598,7 +601,7 @@ CONTEXT_FORMATS = {"canvas", "obsidian-groups"}
 
 
 def render(graph: dict[str, Any], fmt: str = "json",
-           config: Optional[Config] = None) -> str:
+           config: Config | None = None) -> str:
     if fmt == "canvas":
         if config is None:
             raise ValueError("the canvas format needs a Config to resolve vault paths")
@@ -608,7 +611,7 @@ def render(graph: dict[str, Any], fmt: str = "json",
     try:
         return FORMATS[fmt](graph)
     except KeyError:
-        known = sorted(set(FORMATS) | CONTEXT_FORMATS)
+        known = sorted(set(FORMATS) | CONTEXT_FORMATS | {"d3"})
         raise ValueError(
             f"unknown format {fmt!r}; expected one of {', '.join(known)}"
         ) from None

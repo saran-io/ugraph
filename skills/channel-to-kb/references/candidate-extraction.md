@@ -2,17 +2,18 @@
 
 You read **one transcript** and emit **one JSON file**. You do not write knowledge base
 pages. You do not decide whether a concept deserves a page — that decision needs a view
-across all 145 transcripts, which you don't have.
+across the whole corpus, which you don't have.
 
 Your output is the raw material a later canonicalization pass clusters. Precision matters
 more than coverage: a wrong quote poisons a page that cites it.
 
 ## Input / output
 
-- **Read:** `04_learning/raw/ai-engineer/<slug>.md`
-- **Write:** `09_ai_agents/candidates/<slug>.json`
+- **Read:** `<kb>/raw/<channel>/<slug>.md`
+- **Write:** the KB's candidates directory — `ugraph status --json`
+  reports it, and it defaults to `.ugraph/candidates/<slug>.json`
 
-Nothing else. Do not touch `04_learning/`.
+Nothing else. Do not touch anything under the knowledge base itself.
 
 ## Schema
 
@@ -111,4 +112,4 @@ propagate it as fact.
 - Every `timestamp` matches a real `[HH:MM:SS]` marker in that file
 - Every `domain` is from the closed list above
 - The JSON parses
-- You wrote exactly one file, to `09_ai_agents/candidates/`
+- You wrote exactly one file, to the candidates directory

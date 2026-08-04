@@ -29,8 +29,8 @@ import shutil
 import subprocess
 import tempfile
 import time
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable
 
 from ugraph.config import Config
 from ugraph.store import State, hhmmss, iso, log, read_md, slugify, write_md
@@ -292,8 +292,8 @@ def write_source_stub(config: Config, channel_slug: str, video_slug: str, video_
     body = [
         f"# {meta['title']}",
         "",
-        f"**{meta['channel']}** · {hhmmss(meta['duration'])} · "
-        f"[watch](https://www.youtube.com/watch?v={video_id})",
+        (f"**{meta['channel']}** · {hhmmss(meta['duration'])} · "
+         f"[watch](https://www.youtube.com/watch?v={video_id})"),
         "",
     ]
     if not summarized:
@@ -476,7 +476,7 @@ def ingest(config: Config,
 
                 ledger.record(config, f"{slug_for_channel}/{video_slug}", "pulled",
                               by="ugraph ingest youtube", detail=vid)
-            except Exception:  # noqa: BLE001 — bookkeeping must not break ingestion
+            except Exception:
                 pass
 
             if i < len(batch):

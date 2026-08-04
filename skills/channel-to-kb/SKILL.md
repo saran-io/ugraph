@@ -38,7 +38,7 @@ Phase A  parallel, one agent per transcript   → <candidates>/<slug>.json
          spec: references/candidate-extraction.md
          emits candidates ONLY — never pages
 Phase B  serial, one context                  → cluster candidates, decide
-         create / merge / embed against okf.concept_registry()
+         create / merge / embed against the existing concepts/index.md
 Phase C  parallel, ONE AGENT PER CONCEPT      → write pages
          parallelising by concept, not transcript, makes write conflicts impossible
 Phase D  serial                               → reciprocity, ugraph index, ugraph lint
@@ -166,7 +166,7 @@ Then stop. Let them review the diff before the next batch.
 ## Quality bar
 
 The pages you write should read like the hand-built ones in `concepts/` — for example
-`concepts/jagged-intelligence.md`. Specifically:
+any well-formed page already in `concepts/`. Specifically:
 
 - A `>` blockquote opening line that states the idea sharply
 - Prose that explains *why it matters*, not a bulleted transcript restatement

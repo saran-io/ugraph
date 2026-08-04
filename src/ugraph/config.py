@@ -8,7 +8,7 @@ script into a tool other people can run.
 
 Resolution order for the KB root, first hit wins:
     1. explicit --kb argument              (CLI flag)
-    2. OKF_KB environment variable
+    2. UGRAPH_KB environment variable
     3. `kb` key in the nearest ugraph.toml    (walking up from cwd)
     4. the directory containing ugraph.toml
     5. cwd, if it looks like a KB (has SCHEMA.md or concepts/)
@@ -74,7 +74,6 @@ class Config:
     taxonomy_path: Path | None = None
     state_dir: Path | None = None
     log_dir: Path | None = None
-    source_dirs: dict[str, str] = field(default_factory=dict)
     raw: dict[str, Any] = field(default_factory=dict)
 
     # -- derived paths -----------------------------------------------------
@@ -174,8 +173,8 @@ def load(kb: str | Path | None = None, start: Path | None = None) -> Config:
     root: Path | None = None
     if kb:
         root = Path(kb).expanduser()
-    elif os.environ.get("OKF_KB"):
-        root = Path(os.environ["OKF_KB"]).expanduser()
+    elif os.environ.get("UGRAPH_KB"):
+        root = Path(os.environ["UGRAPH_KB"]).expanduser()
     elif config_path:
         configured = data.get("kb")
         root = (Path(configured).expanduser() if configured else config_path.parent)
@@ -187,7 +186,7 @@ def load(kb: str | Path | None = None, start: Path | None = None) -> Config:
     if root is None:
         raise ConfigError(
             "cannot find a knowledge base.\n"
-            "  Pass --kb PATH, set OKF_KB, or run inside a directory containing "
+            "  Pass --kb PATH, set UGRAPH_KB, or run inside a directory containing "
             f"{CONFIG_FILENAME}.\n"
             "  To create one:  ugraph init ./my-kb"
         )
@@ -209,6 +208,5 @@ def load(kb: str | Path | None = None, start: Path | None = None) -> Config:
         taxonomy_path=_opt("taxonomy"),
         state_dir=_opt("state_dir"),
         log_dir=_opt("log_dir"),
-        source_dirs=dict(data.get("sources", {})),
         raw=data,
     )

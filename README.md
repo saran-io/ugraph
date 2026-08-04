@@ -32,15 +32,17 @@ entire value, and it is also the hard part — see [Architecture](#architecture)
 ## Install
 
 ```bash
-uv tool install ugraph-kit          # or: pipx install ugraph-kit
-brew install yt-dlp              # required for the YouTube source
+uv tool install git+https://github.com/saran-io/ugraph
+# or: pipx install git+https://github.com/saran-io/ugraph
+brew install yt-dlp   # or: uv tool install yt-dlp / pipx install yt-dlp
 ```
 
 ## Quickstart
 
 ```bash
-ugraph init ~/vault/04_learning              # scaffold a KB (SCHEMA.md, taxonomy, dirs)
-ugraph ingest youtube https://youtube.com/@aiDotEngineer --limit 50
+cd ~/vault                                  # anywhere at or above the KB
+ugraph init knowledge                       # scaffold (SCHEMA.md, taxonomy, dirs)
+ugraph ingest youtube https://youtube.com/@SomeChannel --limit 50
 ugraph index                                 # regenerate navigation
 ugraph lint                                  # conformance gate — must be 0 errors
 ugraph status                                # what is extracted, what is pending
@@ -105,7 +107,7 @@ ugraph skills install                # copies skills/ into ./.claude/skills/
 ```
 
 Then in Claude Code: `/channel-to-kb`. The skill covers batch selection, the
-create-vs-merge threshold, and the citation format. `skills/references/candidate-extraction.md`
+create-vs-merge threshold, and the citation format. `skills/channel-to-kb/references/candidate-extraction.md`
 is the Phase A spec — read it before pointing any other harness at this.
 
 It is written for Claude Code because that is what it was built and tested against. The
@@ -204,10 +206,10 @@ Below that it is infrastructure you maintain instead of using.
 
 ## Configuration
 
-`ugraph.toml` beside your KB, or `--kb PATH`, or `OKF_KB`:
+`ugraph.toml` beside your KB, or `--kb PATH`, or `UGRAPH_KB`:
 
 ```toml
-kb = "04_learning"
+kb = "knowledge"
 taxonomy = "taxonomy.json"
 ```
 

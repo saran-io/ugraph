@@ -9,8 +9,8 @@ from __future__ import annotations
 
 import json
 
-from ugraph import graph, indexes
 from tests.test_roundtrip import scaffold
+from ugraph import graph, indexes
 
 
 def test_layout_is_deterministic(tmp_path):

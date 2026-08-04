@@ -14,7 +14,7 @@ Library entry points:
     from ugraph import config, indexes, lint, status, verify
     from ugraph.sources import youtube
 
-    cfg = config.load(kb="~/vault/04_learning")
+    cfg = config.load(kb="~/vault/knowledge")
     youtube.ingest(cfg, "https://youtube.com/@example", limit=25)
     indexes.write_all(cfg)
     findings, pages = lint.lint(cfg)

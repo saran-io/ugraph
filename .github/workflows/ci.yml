@@ -1,0 +1,105 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: test · py${{ matrix.python }} · ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.10", "3.11", "3.12", "3.13"]
+        os: [ubuntu-latest]
+        include:
+          # One macOS run: the tool is Obsidian-adjacent, so most users are there,
+          # and path handling is the part most likely to differ.
+          - python: "3.12"
+            os: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - run: uv python install ${{ matrix.python }}
+      - run: uv venv --python ${{ matrix.python }}
+      - run: uv pip install -e ".[dev]"
+      - run: uv run --no-project pytest -q
+      - run: uv run --no-project ruff check src/ tests/
+
+  package:
+    name: install from sdist and wheel
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+
+      - name: Build both artifacts
+        run: uv build
+
+      # The sdist once carried a 613-file test virtualenv containing an absolute
+      # symlink, which made `pip install git+https://...` fail outright while the
+      # wheel installed fine. Building is not evidence; installing is.
+      - name: sdist carries no build environment
+        run: |
+          if tar -tzf dist/*.tar.gz | grep -E '(^|/)\.?venv'; then
+            echo "::error::sdist contains a virtualenv — check the only-include list"
+            exit 1
+          fi
+          echo "sdist entries: $(tar -tzf dist/*.tar.gz | wc -l)"
+
+      - name: Install from sdist and run the first-use flow
+        run: |
+          uv venv --python 3.12 /tmp/sdist-venv
+          uv pip install --python /tmp/sdist-venv dist/*.tar.gz
+          mkdir -p /tmp/vault/.obsidian
+          /tmp/sdist-venv/bin/ugraph --version
+          /tmp/sdist-venv/bin/ugraph init /tmp/vault/kb
+          /tmp/sdist-venv/bin/ugraph --kb /tmp/vault/kb skills install --dest /tmp/sk
+          test -f /tmp/sk/channel-to-kb/SKILL.md
+          /tmp/sdist-venv/bin/ugraph --kb /tmp/vault/kb lint
+          /tmp/sdist-venv/bin/ugraph --kb /tmp/vault/kb ledger
+
+      - name: Install from wheel and run the same flow
+        run: |
+          uv venv --python 3.12 /tmp/wheel-venv
+          uv pip install --python /tmp/wheel-venv dist/*.whl
+          mkdir -p /tmp/vault2/.obsidian
+          /tmp/wheel-venv/bin/ugraph init /tmp/vault2/kb
+          /tmp/wheel-venv/bin/ugraph --kb /tmp/vault2/kb lint
+
+      # Every command's --json is the contract a future UI will read. Breaking it
+      # silently is easy; asserting it is cheap.
+      - name: JSON output stays parseable
+        run: |
+          B=/tmp/sdist-venv/bin/ugraph
+          K="--kb /tmp/vault/kb"
+          $B $K status --json  | python3 -c 'import json,sys; json.load(sys.stdin)'
+          $B $K lint   --json  | python3 -c 'import json,sys; json.load(sys.stdin)'
+          $B $K ledger --json  | python3 -c 'import json,sys; json.load(sys.stdin)'
+          $B $K graph  --format json | python3 -c 'import json,sys; json.load(sys.stdin)'
+
+  hygiene:
+    name: no personal paths ship
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # This project was extracted from one person's Obsidian vault. Absolute home
+      # paths and vault-specific folder names leaked into docs once already; the
+      # graph exports embedded the operator's home directory by default.
+      - name: Scan shipped files
+        run: |
+          if grep -rIn -E '/Users/[a-z]|/home/[a-z]|founder_os|04_learning|09_ai_agents' \
+               src/ skills/ templates/ README.md pyproject.toml; then
+            echo "::error::personal or vault-specific path in a shipped file"
+            exit 1
+          fi
+          echo "clean"

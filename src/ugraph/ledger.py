@@ -29,14 +29,14 @@ from __future__ import annotations
 
 import json
 from collections import defaultdict
+from collections.abc import Iterable
 from dataclasses import asdict, dataclass, field
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Iterable, Optional
+from typing import Any
 
 from ugraph.config import Config
-from ugraph.model import Page, get_typed_edges, iter_pages
-from ugraph.store import read_md
+from ugraph.model import get_typed_edges, iter_pages
 
 LEDGER_FILENAME = "ledger.jsonl"
 
@@ -70,9 +70,9 @@ class Item:
     linked: bool = False
     concepts: list[str] = field(default_factory=list)
     issues: list[str] = field(default_factory=list)
-    first_seen: Optional[str] = None
-    last_change: Optional[str] = None
-    age_days: Optional[int] = None
+    first_seen: str | None = None
+    last_change: str | None = None
+    age_days: int | None = None
 
     @property
     def done(self) -> bool:
@@ -102,7 +102,7 @@ def record(config: Config, slug: str, stage: str, by: str = "",
     inspect with ordinary tools is a ledger nobody checks.
     """
     if stage not in STAGES and stage not in TERMINAL and stage not in PROBLEM:
-        known = ", ".join(STAGES + sorted(TERMINAL))
+        known = ", ".join(STAGES + sorted(TERMINAL) + sorted(PROBLEM))
         raise ValueError(f"unknown stage {stage!r}; expected one of {known}")
 
     entry = {
@@ -116,7 +116,7 @@ def record(config: Config, slug: str, stage: str, by: str = "",
     return entry
 
 
-def history(config: Config, slug: Optional[str] = None) -> list[dict[str, Any]]:
+def history(config: Config, slug: str | None = None) -> list[dict[str, Any]]:
     """Read transitions back, oldest first. A corrupt line is skipped, not fatal —
     losing one entry is recoverable; refusing to open the ledger is not."""
     path = ledger_path(config)
@@ -141,7 +141,7 @@ def history(config: Config, slug: Optional[str] = None) -> list[dict[str, Any]]:
 # ---------------------------------------------------------------------------
 
 
-def _mtime(path: Path) -> Optional[str]:
+def _mtime(path: Path) -> str | None:
     try:
         return datetime.fromtimestamp(path.stat().st_mtime,
                                       timezone.utc).isoformat(timespec="seconds")
@@ -256,7 +256,7 @@ def summary(items: Iterable[Item]) -> dict[str, int]:
 # ---------------------------------------------------------------------------
 
 
-def render_table(items: list[Item], limit: Optional[int] = None) -> str:
+def render_table(items: list[Item], limit: int | None = None) -> str:
     """Compact terminal view."""
     if not items:
         return "  no sources yet — run `ugraph ingest`"
@@ -352,7 +352,7 @@ def render_markdown(items: list[Item], config: Config) -> str:
     return "\n".join(lines) + "\n"
 
 
-def write_report(config: Config, items: Optional[list[Item]] = None) -> Path:
+def write_report(config: Config, items: list[Item] | None = None) -> Path:
     items = items if items is not None else collect(config)
     path = Path(config.logs) / "ledger.md"
     path.parent.mkdir(parents=True, exist_ok=True)

@@ -245,8 +245,8 @@ def build_root_index(config: Config, tax: dict) -> tuple[Path, str]:
         "",
         "## Contents",
         "",
-        f"- **{counts['concept']}** concepts · **{counts['entity']}** entities · "
-        f"**{counts['source']}** sources",
+        (f"- **{counts['concept']}** concepts · **{counts['entity']}** entities · "
+         f"**{counts['source']}** sources"),
         "",
         "### By domain",
         "",

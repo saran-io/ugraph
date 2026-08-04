@@ -207,3 +207,32 @@ def test_default_candidates_sit_outside_the_kb(tmp_path):
     """Phase A output is working state, not knowledge — it must not be linted."""
     cfg = scaffold(tmp_path)
     assert cfg.kb not in cfg.candidates.parents
+
+
+def test_one_bad_file_does_not_hide_the_rest_of_the_kb(tmp_path):
+    """A malformed page must cost one finding, not the remainder of the corpus.
+
+    `iter_pages` is a generator that raises on unparseable frontmatter, and a raised
+    generator cannot be resumed. An earlier `load_pages` caught that exception and
+    broke, so every page sorted after the bad one silently vanished — and the linter
+    then reported PASS on a knowledge base it had stopped reading. A gate that fails
+    open is worse than no gate.
+    """
+    cfg = scaffold(tmp_path)
+    indexes.write_all(cfg)
+
+    # Sorts before 'context-budget.md', so a break here would swallow the real page.
+    (cfg.concepts / "aaa-broken.md").write_text(
+        "---\ntype: concept\ntitle: [unclosed\n  bad: : yaml\n---\n\n# Broken\n",
+        encoding="utf-8")
+    # And one after it, to catch the reverse ordering too.
+    (cfg.concepts / "zzz-broken.md").write_text(
+        "---\n\tthis is not: valid: yaml\n---\n", encoding="utf-8")
+
+    findings, pages = lint.lint(cfg)
+
+    seen = {p.path.name for p in pages}
+    assert "context-budget.md" in seen, "a good page was dropped by a bad neighbour"
+    assert any(e["check"] == "parse" for e in findings.errors)
+    # Both bad files reported, not just the first one encountered.
+    assert sum(1 for e in findings.errors if e["check"] == "parse") == 2

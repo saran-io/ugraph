@@ -21,7 +21,7 @@ The format is his; the extensions below are not, and are marked **OKF-v** where 
 ## Where the knowledge base lives
 
 Wherever you put it. `ugraph init PATH` scaffolds one, and every command resolves the root
-from `--kb PATH`, then `$OKF_KB`, then the `kb` key in the nearest `ugraph.toml`, then the
+from `--kb PATH`, then `$UGRAPH_KB`, then the `kb` key in the nearest `ugraph.toml`, then the
 current directory if it looks like a knowledge base.
 
 A KB is a directory of markdown files. It can sit inside an Obsidian vault, a git repo,
@@ -62,7 +62,7 @@ rendered into `concepts/index.md` headings by `ugraph index`. Flat paths keep li
 stable when a note's domain is reclassified — otherwise every reclassification is a file
 move, and every file move breaks inbound links.
 
-`_mocs/` is not created by `ugraph init`. Make it if you want curated narrative overviews;
+`_mocs/` is created by `ugraph init`. Make it if you want curated narrative overviews;
 the root index picks up its direct children automatically.
 
 Phase A extraction candidates are written to `.ugraph/candidates/` **outside** the KB root.
@@ -411,7 +411,7 @@ citations are approximately right is worse than no knowledge base, because it is
 
 It is called out this loudly because it went wrong. In the original implementation this
 check did not exist: quote fidelity was an instruction in a prompt and nothing verified
-it. Three full extraction rounds ran that way, and `kb_lint.py` reported green the entire
+it. Three full extraction rounds ran that way, and ``ugraph lint`` reported green the entire
 time — every link resolved, every page was indexed, every required field was present, and
 the structural linter had no opinion whatsoever about whether the quotes were real. Green
 on structure was mistaken for green overall. `ugraph verify` exists so that mistake is not

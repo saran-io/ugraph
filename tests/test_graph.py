@@ -9,8 +9,8 @@ from __future__ import annotations
 import json
 import xml.etree.ElementTree as ET
 
-from ugraph import graph, indexes, lint, model
 from tests.test_roundtrip import scaffold
+from ugraph import graph, indexes, lint, model
 
 
 def test_every_node_is_a_real_page(tmp_path):

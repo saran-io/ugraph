@@ -1,5 +1,5 @@
 {
-  "_comment": "Drives index.md grouping and the closed `domain` vocabulary. Edit here, then run build_indexes.py. Anything unmatched lands under 'Other' \u2014 never silently dropped.",
+  "_comment": "Drives index.md grouping and the closed `domain` vocabulary. Edit here, then run `ugraph index`. Anything unmatched lands under 'Other' \u2014 never silently dropped.",
   "domains": {
     "agentic_systems": "Agentic Systems",
     "ai_engineering": "AI Engineering",
