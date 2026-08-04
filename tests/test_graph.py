@@ -9,7 +9,7 @@ from __future__ import annotations
 import json
 import xml.etree.ElementTree as ET
 
-from okf import graph, indexes, lint, model
+from ugraph import graph, indexes, lint, model
 from tests.test_roundtrip import scaffold
 
 

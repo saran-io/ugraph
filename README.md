@@ -1,4 +1,4 @@
-# okf-kit
+# ugraph-kit
 
 Turn a YouTube channel into a knowledge base an AI agent can actually navigate — and cite.
 
@@ -14,7 +14,7 @@ concepts/llm-as-a-judge.md
 ```
 
 Because a knowledge base is only worth as much as your willingness to trust it,
-`okf verify` checks that **every quote is a literal substring of its transcript and every
+`ugraph verify` checks that **every quote is a literal substring of its transcript and every
 timestamp is real**. That check is the point. Everything else is plumbing.
 
 ---
@@ -32,18 +32,18 @@ entire value, and it is also the hard part — see [Architecture](#architecture)
 ## Install
 
 ```bash
-uv tool install okf-kit          # or: pipx install okf-kit
+uv tool install ugraph-kit          # or: pipx install ugraph-kit
 brew install yt-dlp              # required for the YouTube source
 ```
 
 ## Quickstart
 
 ```bash
-okf init ~/vault/04_learning              # scaffold a KB (SCHEMA.md, taxonomy, dirs)
-okf ingest youtube https://youtube.com/@aiDotEngineer --limit 50
-okf index                                 # regenerate navigation
-okf lint                                  # conformance gate — must be 0 errors
-okf status                                # what is extracted, what is pending
+ugraph init ~/vault/04_learning              # scaffold a KB (SCHEMA.md, taxonomy, dirs)
+ugraph ingest youtube https://youtube.com/@aiDotEngineer --limit 50
+ugraph index                                 # regenerate navigation
+ugraph lint                                  # conformance gate — must be 0 errors
+ugraph status                                # what is extracted, what is pending
 ```
 
 You now have transcripts and source stubs. To turn them into concepts, see
@@ -52,7 +52,7 @@ You now have transcripts and source stubs. To turn them into concepts, see
 ### Connecting it to Obsidian
 
 There is nothing to connect. An OKF bundle *is* a directory of markdown, so point
-`okf init` at a folder inside your vault and Obsidian sees it immediately — links resolve,
+`ugraph init` at a folder inside your vault and Obsidian sees it immediately — links resolve,
 backlinks work, the graph view shows the concept cluster.
 
 The one setting worth changing: add `raw/` to **Settings → Files & Links → Excluded files**.
@@ -70,7 +70,7 @@ Ingestion is a script. Extraction is not, and pretending otherwise is where this
 tool usually goes wrong.
 
 ```
-okf ingest ──────────────► raw/ + sources/          deterministic, no LLM
+ugraph ingest ──────────────► raw/ + sources/          deterministic, no LLM
                                 │
   ┌─────────────────────────────┴───────────────────────────┐
   │  Phase A   parallel, one agent per transcript           │
@@ -80,7 +80,7 @@ okf ingest ──────────────► raw/ + sources/        
   │  Phase C   parallel, ONE AGENT PER CONCEPT               │   or your own)
   └─────────────────────────────┬───────────────────────────┘
                                 │
-okf index && okf lint && okf verify   ◄──── deterministic again
+ugraph index && ugraph lint && ugraph verify   ◄──── deterministic again
 ```
 
 **Why the phases split this way.** Canonicalization needs a global view — you cannot know
@@ -101,7 +101,7 @@ re-reading transcripts. Cost stays near 1× the corpus instead of 3×.
 The agent instructions ship with the package:
 
 ```bash
-okf skills install                # copies skills/ into ./.claude/skills/
+ugraph skills install                # copies skills/ into ./.claude/skills/
 ```
 
 Then in Claude Code: `/channel-to-kb`. The skill covers batch selection, the
@@ -118,23 +118,23 @@ agent runner is a prompt-plumbing exercise, not a rewrite.
 
 | | |
 |---|---|
-| `okf init PATH` | Scaffold a KB — `SCHEMA.md`, `taxonomy.json`, directories |
-| `okf ingest youtube URL` | Fetch transcripts. Incremental and resumable |
-| `okf index` | Regenerate every `index.md`. Deterministic; `--check` for CI |
-| `okf lint` | Conformance gate. Links, frontmatter, reciprocity, orphans |
-| `okf verify` | **Every quote verbatim? Every timestamp real?** |
-| `okf status` | Extraction progress, canonicalization health |
-| `okf graph` | Export as a graph — JSON, GraphML, DOT, Canvas, d3 |
-| `okf ledger` | **Where is every source in its lifecycle?** |
-| `okf skills install` | Install the agent instructions into `.claude/skills/` |
+| `ugraph init PATH` | Scaffold a KB — `SCHEMA.md`, `taxonomy.json`, directories |
+| `ugraph ingest youtube URL` | Fetch transcripts. Incremental and resumable |
+| `ugraph index` | Regenerate every `index.md`. Deterministic; `--check` for CI |
+| `ugraph lint` | Conformance gate. Links, frontmatter, reciprocity, orphans |
+| `ugraph verify` | **Every quote verbatim? Every timestamp real?** |
+| `ugraph status` | Extraction progress, canonicalization health |
+| `ugraph graph` | Export as a graph — JSON, GraphML, DOT, Canvas, d3 |
+| `ugraph ledger` | **Where is every source in its lifecycle?** |
+| `ugraph skills install` | Install the agent instructions into `.claude/skills/` |
 
 ### Tracking what is done and what is stuck
 
 ```bash
-okf ledger                 # every source and its stage
-okf ledger --stuck 14      # pulled, unprocessed for 14+ days — the work queue
-okf ledger --write         # markdown report into the logs directory
-okf ledger --slug X        # when each stage happened for one source
+ugraph ledger                 # every source and its stage
+ugraph ledger --stuck 14      # pulled, unprocessed for 14+ days — the work queue
+ugraph ledger --write         # markdown report into the logs directory
+ugraph ledger --slug X        # when each stage happened for one source
 ```
 
 Stages are the same whatever the source is: `discovered → pulled → extracted →
@@ -150,7 +150,7 @@ but not *when* it got there.
 This needs no per-source-type code. Every adapter writes the same `raw/` + `sources/`
 pair, so a blog or newsletter adapter appears in the ledger the day it lands.
 
-`okf status` prints a histogram of concepts by source count. Watch it: a page citing one
+`ugraph status` prints a histogram of concepts by source count. Watch it: a page citing one
 source is a merge candidate, three or more means canonicalization is working. If new
 clusters stop producing merges, the wiki has quietly become a folder again.
 
@@ -162,7 +162,7 @@ Almost certainly not, and the honest answer is worth stating because the alterna
 fashionable.
 
 A knowledge base in this format **already is a graph** — pages are nodes, typed
-relationship headings are labelled edges, and `okf lint` enforces bidirectionality. What
+relationship headings are labelled edges, and `ugraph lint` enforces bidirectionality. What
 it lacks is a *query engine*. Traversal answers "what relates to X." It cannot answer
 "which concepts cite only one source and appear in two clusters" without walking
 everything.
@@ -170,13 +170,13 @@ everything.
 So export the graph rather than becoming one:
 
 ```bash
-okf graph --format json                       # nodes + typed edges
-okf graph --format canvas --concepts-only \
+ugraph graph --format json                       # nodes + typed edges
+ugraph graph --format canvas --concepts-only \
           --out ~/vault/"Concept Graph.canvas"   # Obsidian Canvas, natively
-okf graph --format d3 --out kb.html            # standalone interactive page
-okf graph --format graphml --out kb.graphml    # Gephi, yEd, Neo4j import
-okf graph --format dot --no-provenance         # Graphviz
-okf graph --format obsidian-groups             # colour Obsidian's own graph view
+ugraph graph --format d3 --out kb.html            # standalone interactive page
+ugraph graph --format graphml --out kb.graphml    # Gephi, yEd, Neo4j import
+ugraph graph --format dot --no-provenance         # Graphviz
+ugraph graph --format obsidian-groups             # colour Obsidian's own graph view
 ```
 
 **Obsidian Canvas is the best native target**, and better than Obsidian's graph view:
@@ -204,7 +204,7 @@ Below that it is infrastructure you maintain instead of using.
 
 ## Configuration
 
-`okf.toml` beside your KB, or `--kb PATH`, or `OKF_KB`:
+`ugraph.toml` beside your KB, or `--kb PATH`, or `OKF_KB`:
 
 ```toml
 kb = "04_learning"
@@ -212,7 +212,7 @@ taxonomy = "taxonomy.json"
 ```
 
 `taxonomy.json` holds the closed vocabulary — domains, entity subtypes, source types — and
-drives how indexes group. Edit it, run `okf index`, done.
+drives how indexes group. Edit it, run `ugraph index`, done.
 
 ---
 

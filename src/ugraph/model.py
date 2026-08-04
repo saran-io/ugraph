@@ -17,8 +17,8 @@ import re
 from collections.abc import Iterator
 from pathlib import Path
 
-from okf.config import RESERVED_NAMES, Config
-from okf.store import iter_md, read_md
+from ugraph.config import RESERVED_NAMES, Config
+from ugraph.store import iter_md, read_md
 
 # ---------------------------------------------------------------------------
 # Taxonomy

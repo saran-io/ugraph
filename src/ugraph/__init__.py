@@ -1,5 +1,5 @@
 """
-okf-kit — build an agent-navigable knowledge base from a YouTube channel.
+ugraph-kit — build an agent-navigable knowledge base from a YouTube channel.
 
 Plain markdown, YAML frontmatter, relative links. No database, no embeddings. An agent
 reads an index, follows links to the few pages it needs, and cites a timestamp in an
@@ -11,8 +11,8 @@ implementation of it as a reusable tool; divergences are marked OKF-v in SCHEMA.
 
 Library entry points:
 
-    from okf import config, indexes, lint, status, verify
-    from okf.sources import youtube
+    from ugraph import config, indexes, lint, status, verify
+    from ugraph.sources import youtube
 
     cfg = config.load(kb="~/vault/04_learning")
     youtube.ingest(cfg, "https://youtube.com/@example", limit=25)

@@ -5,12 +5,12 @@ description: Extract concepts and entities from ingested YouTube transcripts int
 
 # Channel → Knowledge Base (extraction pass)
 
-Stage 2 of the KB pipeline. Stage 1 (`okf ingest`) already
+Stage 2 of the KB pipeline. Stage 1 (`ugraph ingest`) already
 put timestamped transcripts in `raw/` and stub pages in `sources/`. This skill turns
 them into **canonical, cross-linked concept and entity pages**.
 
 Read `SCHEMA.md` at the KB root before writing anything. It is the contract;
-`okf lint` enforces it.
+`ugraph lint` enforces it.
 
 ## The one rule that matters
 
@@ -41,14 +41,14 @@ Phase B  serial, one context                  → cluster candidates, decide
          create / merge / embed against okf.concept_registry()
 Phase C  parallel, ONE AGENT PER CONCEPT      → write pages
          parallelising by concept, not transcript, makes write conflicts impossible
-Phase D  serial                               → reciprocity, okf index, okf lint
+Phase D  serial                               → reciprocity, ugraph index, ugraph lint
 ```
 
 **Never parallelise Phase C by transcript.** Twenty agents reading twenty talks will each
 independently create `context-engineering.md`, and the merge — the entire value of the
 KB — is lost.
 
-Check progress with `okf status --clusters`, or `okf ledger --stuck 0` for the
+Check progress with `ugraph status --clusters`, or `ugraph ledger --stuck 0` for the
 per-item work queue.
 
 ## Workflow (single-pass, and Phase B/C of two-phase)
@@ -56,7 +56,7 @@ per-item work queue.
 ### 1. Pick the batch
 
 ```bash
-okf ledger --pending --limit 10
+ugraph ledger --pending --limit 10
 ```
 
 Default batch size is **10 transcripts**. Larger batches degrade canonicalization —
@@ -67,7 +67,7 @@ you stop noticing that talk 14 and talk 3 are describing the same idea.
 Read `concepts/index.md` and `entities/index.md` at the KB root, or:
 
 ```bash
-okf status --thin        # concepts with one source — the likeliest merge targets
+ugraph status --thin        # concepts with one source — the likeliest merge targets
 ```
 
 This is the dedup baseline. You cannot canonicalize against pages you haven't seen,
@@ -128,9 +128,9 @@ stage happened or *why* something was set aside. Phases A–C run in an agent ra
 in Python, so those transitions are only in the ledger if you put them there:
 
 ```bash
-okf ledger record <source-slug> extracted   --by "phase A"
-okf ledger record <source-slug> synthesized --by "phase C" --detail "fed 3 concepts"
-okf ledger record <source-slug> skipped     --by "phase A" --detail "vendor pitch, no transferable content"
+ugraph ledger record <source-slug> extracted   --by "phase A"
+ugraph ledger record <source-slug> synthesized --by "phase C" --detail "fed 3 concepts"
+ugraph ledger record <source-slug> skipped     --by "phase A" --detail "vendor pitch, no transferable content"
 ```
 
 `skipped` matters as much as the others. A talk with nothing in it is *finished*, not
@@ -142,9 +142,9 @@ where it went. That is the difference between "in flight" and "forgotten".
 ### 8. Validate
 
 ```bash
-okf index
-okf lint
-okf verify
+ugraph index
+ugraph lint
+ugraph verify
 ```
 
 All three must pass before you report done — `lint` and `verify` with **0 errors**. Fix what it reports; do not
@@ -188,7 +188,7 @@ A short true page beats a long padded one.
 
 ## Related
 
-- Stage 1 ingestion — `okf ingest`
+- Stage 1 ingestion — `ugraph ingest`
 - Schema contract — `SCHEMA.md` at the KB root
-- Conformance gate — `okf lint` · quote verification — `okf verify`
-- Index generation — `okf index` · lifecycle — `okf ledger`
+- Conformance gate — `ugraph lint` · quote verification — `ugraph verify`
+- Index generation — `ugraph index` · lifecycle — `ugraph ledger`

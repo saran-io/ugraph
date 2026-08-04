@@ -15,8 +15,8 @@ from pathlib import Path
 
 import pytest
 
-from okf import config as config_mod
-from okf import indexes, lint, status, store
+from ugraph import config as config_mod
+from ugraph import indexes, lint, status, store
 
 TRANSCRIPT = """\
 # Example Talk
@@ -36,7 +36,7 @@ def scaffold(tmp_path: Path) -> config_mod.Config:
     for rel in config_mod.CONTENT_DIRS:
         (kb / rel).mkdir(parents=True, exist_ok=True)
 
-    from okf import templates
+    from ugraph import templates
     (kb / "taxonomy.json").write_text(templates.read("taxonomy.json"), encoding="utf-8")
     (kb / "SCHEMA.md").write_text("---\ntype: overview\ntitle: Schema\n---\n\n# Schema\n",
                                   encoding="utf-8")
@@ -149,16 +149,16 @@ def test_status_reports_canonicalization_health(tmp_path):
 def test_config_resolution_errors_are_actionable(tmp_path):
     with pytest.raises(config_mod.ConfigError) as exc:
         config_mod.load(kb=None, start=tmp_path)
-    assert "okf init" in str(exc.value)
+    assert "ugraph init" in str(exc.value)
 
 
 def test_init_suggests_commands_that_actually_run(tmp_path, capsys, monkeypatch):
-    """`okf init vault/kb` writes okf.toml into `vault/`, but config resolution walks
-    UP from the working directory — so a bare `okf ingest` from the parent cannot find
+    """`ugraph init vault/kb` writes ugraph.toml into `vault/`, but config resolution walks
+    UP from the working directory — so a bare `ugraph ingest` from the parent cannot find
     it. Printing the bare command sent users straight into "cannot find a knowledge
     base" as the very next thing they ran after a successful init.
     """
-    from okf import cli
+    from ugraph import cli
 
     workdir = tmp_path / "work"
     (workdir / "MyVault").mkdir(parents=True)
@@ -168,31 +168,31 @@ def test_init_suggests_commands_that_actually_run(tmp_path, capsys, monkeypatch)
     assert args.func(args) == 0
     out = capsys.readouterr().out
 
-    # okf.toml landed in MyVault/, which is below cwd and therefore unreachable.
-    assert (workdir / "MyVault" / "okf.toml").exists()
+    # ugraph.toml landed in MyVault/, which is below cwd and therefore unreachable.
+    assert (workdir / "MyVault" / "ugraph.toml").exists()
     assert "--kb MyVault/knowledge ingest youtube" in out
     assert "cd MyVault" in out
 
 
 def test_init_omits_the_flag_when_config_is_reachable(tmp_path, capsys, monkeypatch):
     """Inside a directory the config search can reach, the flag is noise."""
-    from okf import cli
+    from ugraph import cli
 
     monkeypatch.chdir(tmp_path)
     args = cli.build_parser().parse_args(["init", "kb"])
     assert args.func(args) == 0
     out = capsys.readouterr().out
-    assert "okf ingest youtube" in out
+    assert "ugraph ingest youtube" in out
     assert "--kb" not in out
 
 
 def test_configured_candidates_path_resolves_against_the_kb(tmp_path, monkeypatch):
-    """A relative `candidates` path in okf.toml must resolve against the KB, not the
+    """A relative `candidates` path in ugraph.toml must resolve against the KB, not the
     working directory — otherwise the setting appears to do nothing, or something
     different, depending on where the command was run from."""
     kb = tmp_path / "vault" / "kb"
     kb.mkdir(parents=True)
-    (tmp_path / "vault" / "okf.toml").write_text(
+    (tmp_path / "vault" / "ugraph.toml").write_text(
         'kb = "kb"\ncandidates = "../tooling/candidates"\n', encoding="utf-8")
 
     monkeypatch.chdir(tmp_path)

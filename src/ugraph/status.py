@@ -24,8 +24,8 @@ from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
 
-from okf.config import Config
-from okf.model import Page, iter_pages
+from ugraph.config import Config
+from ugraph.model import Page, iter_pages
 
 __all__ = ["collect", "render"]
 

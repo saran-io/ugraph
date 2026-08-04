@@ -1,7 +1,7 @@
 """
 templates.py — access to the files shipped inside the wheel.
 
-`okf init` copies these into a new knowledge base, and `config.taxonomy()` falls back to
+`ugraph init` copies these into a new knowledge base, and `config.taxonomy()` falls back to
 the packaged vocabulary so a bare `init` produces something that lints. Kept in one place
 because "where do the bundled files live" has two answers — installed wheel vs source
 checkout — and every caller getting that wrong independently is how packaging bugs happen.

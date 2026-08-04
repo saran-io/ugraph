@@ -1,4 +1,4 @@
-"""okf.sources — ingest adapters.
+"""ugraph.sources — ingest adapters.
 
 Each module in this package pulls from one kind of feed (a YouTube channel, an RSS
 feed, a folder of PDFs) and lands it in the knowledge base as a pair of pages: an

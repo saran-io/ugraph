@@ -1,5 +1,5 @@
 """
-cli.py — the `okf` command.
+cli.py — the `ugraph` command.
 
 Deliberately thin. Every subcommand resolves a Config, calls one library function, and
 formats the result. Logic that lives here cannot be tested or reused, so it does not live
@@ -18,8 +18,8 @@ import shutil
 import sys
 from pathlib import Path
 
-from okf import __version__
-from okf import config as config_mod
+from ugraph import __version__
+from ugraph import config as config_mod
 
 # ---------------------------------------------------------------------------
 # helpers
@@ -29,7 +29,7 @@ def _config(args) -> config_mod.Config:
     try:
         return config_mod.load(kb=getattr(args, "kb", None))
     except config_mod.ConfigError as exc:
-        sys.exit(f"okf: {exc}")
+        sys.exit(f"ugraph: {exc}")
 
 
 def _bundled(name: str) -> Path:
@@ -41,7 +41,7 @@ def _bundled(name: str) -> Path:
     repo = Path(__file__).resolve().parents[2] / name
     if repo.is_dir():
         return repo
-    sys.exit(f"okf: cannot locate bundled {name}/ — is the install complete?")
+    sys.exit(f"ugraph: cannot locate bundled {name}/ — is the install complete?")
 
 
 # ---------------------------------------------------------------------------
@@ -54,7 +54,7 @@ def cmd_init(args) -> int:
 
     existing = [p for p in (root / "SCHEMA.md", root / "taxonomy.json") if p.exists()]
     if existing and not args.force:
-        print(f"okf: {root} already looks like a knowledge base.")
+        print(f"ugraph: {root} already looks like a knowledge base.")
         for p in existing:
             print(f"  exists: {p.name}")
         print("  use --force to overwrite the scaffold (content is never touched)")
@@ -70,7 +70,7 @@ def cmd_init(args) -> int:
     if not cfg_path.exists():
         cfg_path.write_text(f'kb = "{root.name}"\n', encoding="utf-8")
 
-    from okf import indexes
+    from ugraph import indexes
     cfg = config_mod.load(kb=root)
     indexes.write_all(cfg)
 
@@ -78,8 +78,8 @@ def cmd_init(args) -> int:
     print(f"  wrote SCHEMA.md, taxonomy.json, {len(config_mod.CONTENT_DIRS)} directories")
     print(f"  wrote {cfg_path}")
 
-    # Config resolution walks UP from the working directory, so a bare `okf ingest`
-    # only finds okf.toml when you are at or below its directory. Printing the bare
+    # Config resolution walks UP from the working directory, so a bare `ugraph ingest`
+    # only finds ugraph.toml when you are at or below its directory. Printing the bare
     # command here sent people straight into "cannot find a knowledge base" — the very
     # next thing they ran after a successful init. Emit commands that work from where
     # the user is actually standing.
@@ -92,8 +92,8 @@ def cmd_init(args) -> int:
 
     print()
     print("Next:")
-    print(f"  okf {prefix}ingest youtube <channel-url> --limit 25")
-    print(f"  okf {prefix}skills install     # agent instructions for the extraction pass")
+    print(f"  ugraph {prefix}ingest youtube <channel-url> --limit 25")
+    print(f"  ugraph {prefix}skills install     # agent instructions for the extraction pass")
     if not reachable:
         print()
         print(f"  (or `cd {cfg_path.parent.name}` and drop the --kb flag)")
@@ -107,9 +107,9 @@ def cmd_init(args) -> int:
 def cmd_ingest(args) -> int:
     cfg = _config(args)
     if args.source != "youtube":
-        sys.exit(f"okf: unknown source '{args.source}' (only 'youtube' so far)")
+        sys.exit(f"ugraph: unknown source '{args.source}' (only 'youtube' so far)")
 
-    from okf.sources import youtube
+    from ugraph.sources import youtube
 
     def progress(i, total, vid, title):
         print(f"[{i}/{total}] {vid}  {title[:58]}")
@@ -121,9 +121,9 @@ def cmd_ingest(args) -> int:
             sleep=args.sleep, force=args.force, progress=progress,
         )
     except FileNotFoundError as exc:
-        sys.exit(f"okf: {exc}")
+        sys.exit(f"ugraph: {exc}")
     except RuntimeError as exc:
-        sys.exit(f"okf: {exc}")
+        sys.exit(f"ugraph: {exc}")
 
     if args.dry_run:
         for v in result.get("videos", []):
@@ -135,7 +135,7 @@ def cmd_ingest(args) -> int:
         print(f"  [warn] {warning}")
     print(f"\nIngested {result['written']}, skipped {result['skipped']}. "
           f"{result['total_ingested']}/{result['listed']} of the listing now in the KB.")
-    print("Next: okf index && okf lint")
+    print("Next: ugraph index && ugraph lint")
     return 0
 
 
@@ -144,12 +144,12 @@ def cmd_ingest(args) -> int:
 # ---------------------------------------------------------------------------
 
 def cmd_index(args) -> int:
-    from okf import indexes
+    from ugraph import indexes
     cfg = _config(args)
     if args.check:
         stale = indexes.check(cfg)
         if stale:
-            print("Stale indexes (run `okf index`):")
+            print("Stale indexes (run `ugraph index`):")
             for p in stale:
                 print(f"  {p.relative_to(cfg.kb)}")
             return 1
@@ -166,7 +166,7 @@ def cmd_index(args) -> int:
 
 
 def cmd_lint(args) -> int:
-    from okf import lint as lint_mod
+    from ugraph import lint as lint_mod
     cfg = _config(args)
     findings, pages = lint_mod.lint(cfg)
 
@@ -197,7 +197,7 @@ def cmd_lint(args) -> int:
 
 
 def cmd_verify(args) -> int:
-    from okf import verify as verify_mod
+    from ugraph import verify as verify_mod
     cfg = _config(args)
 
     if args.pages_only:
@@ -224,7 +224,7 @@ def cmd_verify(args) -> int:
 
 
 def cmd_status(args) -> int:
-    from okf import status as status_mod
+    from ugraph import status as status_mod
     cfg = _config(args)
     stats = status_mod.collect(cfg)
     if args.json:
@@ -236,7 +236,7 @@ def cmd_status(args) -> int:
 
 
 def cmd_graph(args) -> int:
-    from okf import graph as graph_mod
+    from ugraph import graph as graph_mod
     cfg = _config(args)
     types = {"concept", "entity", "moc"} if args.concepts_only else None
     g = graph_mod.build(cfg, include_provenance=not args.no_provenance, types=types)
@@ -246,7 +246,7 @@ def cmd_graph(args) -> int:
         else:
             rendered = graph_mod.render(g, args.format, config=cfg)
     except ValueError as exc:
-        sys.exit(f"okf: {exc}")
+        sys.exit(f"ugraph: {exc}")
 
     if args.format == "canvas" and graph_mod.find_vault_root(cfg) is None:
         print("  [warn] no .obsidian found above the KB — canvas file paths may not "
@@ -264,17 +264,17 @@ def cmd_graph(args) -> int:
 
 
 def cmd_ledger(args) -> int:
-    from okf import ledger as ledger_mod
+    from ugraph import ledger as ledger_mod
     cfg = _config(args)
 
     if args.action == "record":
         try:
             if not args.rec_slug or not args.rec_stage:
-                sys.exit("okf: usage — okf ledger record <slug> <stage>")
+                sys.exit("ugraph: usage — ugraph ledger record <slug> <stage>")
             entry = ledger_mod.record(cfg, args.rec_slug, args.rec_stage,
                                       by=args.by, detail=args.detail)
         except ValueError as exc:
-            sys.exit(f"okf: {exc}")
+            sys.exit(f"ugraph: {exc}")
         print(f"recorded {entry['stage']}  {entry['slug']}")
         return 0
 
@@ -282,7 +282,7 @@ def cmd_ledger(args) -> int:
         events = ledger_mod.history(cfg, args.slug)
         if not events:
             print(f"no recorded transitions for {args.slug}")
-            print("  (state is still derived from the files — try `okf ledger --json`)")
+            print("  (state is still derived from the files — try `ugraph ledger --json`)")
             return 0
         for e in events:
             detail = f"  {e['detail']}" if e.get("detail") else ""
@@ -318,7 +318,7 @@ def cmd_ledger(args) -> int:
 
 def cmd_skills(args) -> int:
     if args.action != "install":
-        sys.exit("okf: only `okf skills install` is supported")
+        sys.exit("ugraph: only `ugraph skills install` is supported")
     src = _bundled("skills")
     dest = Path(args.dest).expanduser().resolve()
     dest.mkdir(parents=True, exist_ok=True)
@@ -346,12 +346,12 @@ def cmd_skills(args) -> int:
 
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
-        prog="okf",
+        prog="ugraph",
         description="Build an agent-navigable knowledge base from a YouTube channel.",
     )
-    p.add_argument("--version", action="version", version=f"okf-kit {__version__}")
+    p.add_argument("--version", action="version", version=f"ugraph-kit {__version__}")
     p.add_argument("--kb", metavar="PATH",
-                   help="knowledge base root (default: okf.toml, $OKF_KB, or cwd)")
+                   help="knowledge base root (default: ugraph.toml, $OKF_KB, or cwd)")
     sub = p.add_subparsers(dest="command", required=True)
 
     sp = sub.add_parser("init", help="scaffold a new knowledge base")
@@ -442,7 +442,7 @@ def main(argv: list[str] | None = None) -> int:
         print("\ninterrupted", file=sys.stderr)
         return 130
     except BrokenPipeError:
-        # A downstream reader closed the pipe — `okf graph | head`, `| jq .nodes[0]`.
+        # A downstream reader closed the pipe — `ugraph graph | head`, `| jq .nodes[0]`.
         # That is normal usage, not an error, but Python will also try to flush stdout
         # on exit and raise a second time. Pointing the fd at devnull first is the
         # documented way to exit quietly.

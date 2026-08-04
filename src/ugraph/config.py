@@ -9,8 +9,8 @@ script into a tool other people can run.
 Resolution order for the KB root, first hit wins:
     1. explicit --kb argument              (CLI flag)
     2. OKF_KB environment variable
-    3. `kb` key in the nearest okf.toml    (walking up from cwd)
-    4. the directory containing okf.toml
+    3. `kb` key in the nearest ugraph.toml    (walking up from cwd)
+    4. the directory containing ugraph.toml
     5. cwd, if it looks like a KB (has SCHEMA.md or concepts/)
 
 A KB is just a directory. It can sit inside an Obsidian vault, a git repo, or
@@ -30,9 +30,9 @@ try:  # stdlib from 3.11; the backport is a dependency below that
 except ModuleNotFoundError:  # pragma: no cover
     import tomli as tomllib  # type: ignore[no-redef]
 
-CONFIG_FILENAME = "okf.toml"
+CONFIG_FILENAME = "ugraph.toml"
 
-# Directories that make up an OKF bundle. Created by `okf init`.
+# Directories that make up an OKF bundle. Created by `ugraph init`.
 #
 # `_mocs` is here because it is part of the strict tree (see OKF_DIRS) and so is held
 # to the no-wikilink rule. Scaffolding it but leaving it empty was a real oversight:
@@ -53,7 +53,7 @@ class ConfigError(RuntimeError):
 
 
 def find_config(start: Path | None = None) -> Path | None:
-    """Walk up from `start` (default cwd) looking for okf.toml."""
+    """Walk up from `start` (default cwd) looking for ugraph.toml."""
     current = (start or Path.cwd()).resolve()
     for directory in (current, *current.parents):
         candidate = directory / CONFIG_FILENAME
@@ -109,33 +109,33 @@ class Config:
         not knowledge, and should not be linted or indexed as pages.
 
         A configured relative path resolves against the KB root, like every other
-        path in okf.toml. Returning it unresolved made `candidates = "some/dir"`
+        path in ugraph.toml. Returning it unresolved made `candidates = "some/dir"`
         silently resolve against the working directory instead, so the setting
         appeared to do nothing depending on where you ran the command from.
         """
         configured = self.raw.get("candidates")
         if not configured:
-            return self.kb.parent / ".okf" / "candidates"
+            return self.kb.parent / ".ugraph" / "candidates"
         path = Path(configured).expanduser()
         return path if path.is_absolute() else (self.kb / path).resolve()
 
     @property
     def state(self) -> Path:
-        return self.state_dir or (self.kb.parent / ".okf" / "state")
+        return self.state_dir or (self.kb.parent / ".ugraph" / "state")
 
     @property
     def logs(self) -> Path:
-        return self.log_dir or (self.kb.parent / ".okf" / "logs")
+        return self.log_dir or (self.kb.parent / ".ugraph" / "logs")
 
     def taxonomy(self) -> dict:
         """Load the closed vocabulary. Falls back to the packaged default so a
-        bare `okf init` works without the user writing one."""
+        bare `ugraph init` works without the user writing one."""
         if self.taxonomy_path and self.taxonomy_path.is_file():
             return json.loads(self.taxonomy_path.read_text(encoding="utf-8"))
         packaged = self.kb / "taxonomy.json"
         if packaged.is_file():
             return json.loads(packaged.read_text(encoding="utf-8"))
-        from okf import templates
+        from ugraph import templates
         return json.loads(templates.read("taxonomy.json"))
 
     def is_okf_page(self, path: Path) -> bool:
@@ -153,10 +153,10 @@ def load(kb: str | Path | None = None, start: Path | None = None) -> Config:
     """Resolve a Config. See module docstring for the resolution order."""
     data: dict[str, Any] = {}
 
-    # When a KB is named explicitly, look for okf.toml beside *it* before falling back
+    # When a KB is named explicitly, look for ugraph.toml beside *it* before falling back
     # to the working directory. Searching only from cwd meant the same KB reported
-    # different numbers depending on where the command ran from — `okf --kb X status`
-    # from /tmp disagreed with `okf status` inside the vault, because the second found
+    # different numbers depending on where the command ran from — `ugraph --kb X status`
+    # from /tmp disagreed with `ugraph status` inside the vault, because the second found
     # the config and the first did not. A scheduled job and a human would then see
     # different answers about the same files.
     config_path = None
@@ -189,7 +189,7 @@ def load(kb: str | Path | None = None, start: Path | None = None) -> Config:
             "cannot find a knowledge base.\n"
             "  Pass --kb PATH, set OKF_KB, or run inside a directory containing "
             f"{CONFIG_FILENAME}.\n"
-            "  To create one:  okf init ./my-kb"
+            "  To create one:  ugraph init ./my-kb"
         )
 
     root = root.expanduser().resolve()

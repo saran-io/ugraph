@@ -22,8 +22,8 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Optional
 
-from okf.config import RESERVED_NAMES, Config
-from okf.model import (
+from ugraph.config import RESERVED_NAMES, Config
+from ugraph.model import (
     CONDITIONAL_FIELDS,
     RELATION_HEADINGS,
     REQUIRED_FIELDS,
@@ -38,7 +38,7 @@ from okf.model import (
     iter_pages,
     resolve_md_link,
 )
-from okf.store import State, iter_md, log, read_md
+from ugraph.store import State, iter_md, log, read_md
 
 JOB_NAME = "lint"
 
@@ -275,7 +275,7 @@ def check_indexed(config: Config, pages: Sequence[Page], f: Findings):
             continue
         if page.path.resolve() not in indexed:
             f.error("index", page.rel,
-                    "not listed in any index.md — run `okf index`")
+                    "not listed in any index.md — run `ugraph index`")
 
 
 def check_orphans(config: Config, pages: Sequence[Page], f: Findings):

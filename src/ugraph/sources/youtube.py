@@ -14,8 +14,8 @@ Everything here takes a `Config`; nothing resolves paths on its own and nothing
 prints progress. The CLI owns argument parsing and stdout, and passes a `progress`
 callback if it wants per-video output.
 
-    from okf import config, sources
-    from okf.sources import youtube
+    from ugraph import config, sources
+    from ugraph.sources import youtube
 
     cfg = config.load()
     result = youtube.ingest(cfg, "https://www.youtube.com/@aiDotEngineer", limit=20)
@@ -32,8 +32,8 @@ import time
 from pathlib import Path
 from typing import Callable
 
-from okf.config import Config
-from okf.store import State, hhmmss, iso, log, read_md, slugify, write_md
+from ugraph.config import Config
+from ugraph.store import State, hhmmss, iso, log, read_md, slugify, write_md
 
 # Name used for the state file and the log file. Changing it orphans existing state.
 JOB = "youtube"
@@ -472,10 +472,10 @@ def ingest(config: Config,
             # so the ledger can answer "when", which the filesystem cannot. Failing to
             # log must never fail an ingest that already succeeded.
             try:
-                from okf import ledger
+                from ugraph import ledger
 
                 ledger.record(config, f"{slug_for_channel}/{video_slug}", "pulled",
-                              by="okf ingest youtube", detail=vid)
+                              by="ugraph ingest youtube", detail=vid)
             except Exception:  # noqa: BLE001 — bookkeeping must not break ingestion
                 pass
 

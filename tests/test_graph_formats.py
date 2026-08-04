@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import json
 
-from okf import graph, indexes
+from ugraph import graph, indexes
 from tests.test_roundtrip import scaffold
 
 

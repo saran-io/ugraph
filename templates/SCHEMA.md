@@ -9,8 +9,8 @@ description: "Page types, frontmatter contracts, typed relationships, linking ru
 This is the machine-readable contract for everything in this directory. Plain markdown,
 YAML frontmatter, navigated by `index.md` and relative links. No database, no embeddings.
 
-**Read this before writing to the knowledge base.** `okf lint` enforces the structural
-half of it and `okf verify` enforces the citation half. Neither one checks whether what
+**Read this before writing to the knowledge base.** `ugraph lint` enforces the structural
+half of it and `ugraph verify` enforces the citation half. Neither one checks whether what
 you wrote is *true* — that part is on you, and the rules below exist to make it
 checkable by someone who does not trust you.
 
@@ -20,8 +20,8 @@ The format is his; the extensions below are not, and are marked **OKF-v** where 
 
 ## Where the knowledge base lives
 
-Wherever you put it. `okf init PATH` scaffolds one, and every command resolves the root
-from `--kb PATH`, then `$OKF_KB`, then the `kb` key in the nearest `okf.toml`, then the
+Wherever you put it. `ugraph init PATH` scaffolds one, and every command resolves the root
+from `--kb PATH`, then `$OKF_KB`, then the `kb` key in the nearest `ugraph.toml`, then the
 current directory if it looks like a knowledge base.
 
 A KB is a directory of markdown files. It can sit inside an Obsidian vault, a git repo,
@@ -34,7 +34,7 @@ or nowhere in particular. Nothing in this schema depends on which.
 | Multi-source | `channel` on source pages; sources live at `sources/<channel>/<slug>.md` | Upstream assumes one YouTube channel. A concept is only worth canonicalizing if it survives contact with more than one speaker, so the format has to hold several channels — and papers, articles, and your own notes — at once. |
 | `confidence` | `high` \| `medium` \| `low` on any page | Some claims rest on production numbers at scale; some rest on one person's home lab or a single demo. Without a field for that, the two look identical on the page and get cited identically. |
 | Source affiliation | `affiliation` on source pages: `independent` \| `vendor` \| `buyer` | "This tool cuts latency 40%" means one thing in a vendor's talk and another in an account from someone who paid for it. The distinction is invisible once a claim has been lifted into a concept page, so it is recorded at the source. |
-| `summary_status` | `pending` \| `done` on source pages | Ingestion is a script and extraction is an agent pass; they run at different rates and on different days. This field is the join between them, and it is what `okf status` counts. |
+| `summary_status` | `pending` \| `done` on source pages | Ingestion is a script and extraction is an agent pass; they run at different rates and on different days. This field is the join between them, and it is what `ugraph status` counts. |
 | Strict-tree link rule | Relative markdown links required under `concepts/`, `entities/`, `sources/`, `_mocs/`; `[[wikilinks]]` tolerated elsewhere in the KB | A wikilink only resolves inside the tool that invented it. The format's premise is that a filesystem is enough to follow an edge. Outside the strict tree — trackers, reading lists, human scratch notes — nothing traverses the links but a person in an editor, so wikilinks there are a warning, not an error. |
 
 ## Directory layout
@@ -58,14 +58,14 @@ or nowhere in particular. Nothing in this schema depends on which.
 ```
 
 `concepts/` is **flat on purpose.** Subject grouping lives in the `domain` field and is
-rendered into `concepts/index.md` headings by `okf index`. Flat paths keep link targets
+rendered into `concepts/index.md` headings by `ugraph index`. Flat paths keep link targets
 stable when a note's domain is reclassified — otherwise every reclassification is a file
 move, and every file move breaks inbound links.
 
-`_mocs/` is not created by `okf init`. Make it if you want curated narrative overviews;
+`_mocs/` is not created by `ugraph init`. Make it if you want curated narrative overviews;
 the root index picks up its direct children automatically.
 
-Phase A extraction candidates are written to `.okf/candidates/` **outside** the KB root.
+Phase A extraction candidates are written to `.ugraph/candidates/` **outside** the KB root.
 They are working files, not knowledge, and must not be linted or indexed as pages.
 
 ## Page types
@@ -108,7 +108,7 @@ updated: 2026-08-03
 | `tags` | — | free-form |
 | `confidence` | — | `high` \| `medium` \| `low` — flag for claims resting on weak evidence |
 
-`sources` is what `okf status` counts. A concept with one source is a merge candidate —
+`sources` is what `ugraph status` counts. A concept with one source is a merge candidate —
 usually the same idea already living under another name. Three or more means
 canonicalization is working.
 
@@ -173,14 +173,14 @@ When `source_type: video`, also required: `youtube_id`, `url`, `published`, `dur
 `raw:` must resolve to a file inside `raw/`, and each transcript must be claimed by
 exactly one source page. Two source pages pointing at one transcript is an error: it
 double-counts toward the ≥2-source threshold below and fabricates corroboration that
-never happened. (`okf ingest` also warns loudly when a channel publishes the same talk
+never happened. (`ugraph ingest` also warns loudly when a channel publishes the same talk
 twice under near-identical titles, for the same reason.)
 
 `affiliation` is a convention the linter does not enforce. Record it anyway — a claim's
 provenance stops being visible the moment it is lifted into a concept page.
 
 `summary_status: done` means a human or an agent actually read the transcript and wrote
-the thesis line. Do not set it on a source you did not read; `okf status` treats it as
+the thesis line. Do not set it on a source you did not read; `ugraph status` treats it as
 ground truth for what is left to do, and re-ingestion deliberately refuses to clobber a
 `done` page's hand-written description.
 
@@ -248,7 +248,7 @@ by placing a link under one of these `##` or `###` headings:
 under *some* typed heading — not a specific one. Most of these relations have no clean
 inverse: "A builds on B" does not make B a prerequisite of A in any sense an author would
 write down. Demanding a matching heading would force people to assert relationships they
-do not believe. `okf lint` reports one-way edges as warnings, never errors.
+do not believe. `ugraph lint` reports one-way edges as warnings, never errors.
 
 **Provenance is one-way and is never reciprocated.** A source does not link forward to the
 concepts that cite it — it does not know about them, and it would go stale the moment
@@ -300,7 +300,7 @@ counted from 1, excluding frontmatter. The mechanic is identical to a timestamp:
 quote must appear in that paragraph, in that file, and the file never changes. The trust
 model does not vary with source type — only the coordinate does.
 
-**This is a convention, not a shipped feature.** `okf ingest` currently supports YouTube
+**This is a convention, not a shipped feature.** `ugraph ingest` currently supports YouTube
 only; there is no RSS, email, or PDF ingestion. If you place an article in `raw/` by hand,
 `¶` is the citation form to use.
 
@@ -333,7 +333,7 @@ agentic_systems · ai_engineering · rag · local_llms
 machine_learning · mathematics · system_design · product
 ```
 
-Edit `domains` and `domain_order`, run `okf index`, done. That is the whole workflow:
+Edit `domains` and `domain_order`, run `ugraph index`, done. That is the whole workflow:
 `domains` maps slug → display label, `domain_order` fixes the heading order in generated
 indexes, and any domain not in `domains` is a lint error on the page that declares it.
 
@@ -348,7 +348,7 @@ Two things are *not* user-editable this way:
 
 ## Index contract
 
-Every content directory has an `index.md`, generated by `okf index`. Entries are exactly:
+Every content directory has an `index.md`, generated by `ugraph index`. Entries are exactly:
 
 ```markdown
 - [Display Name](relative-path.md) — one-line description
@@ -357,19 +357,19 @@ Every content directory has an `index.md`, generated by `okf index`. Entries are
 The description is **copied verbatim from the target's `description` field**. This is why
 `description` must be one sentence: it is not a summary of the page, it is the line
 someone reads while deciding whether to open the page. Editing an index by hand is
-pointless — the next `okf index` overwrites it. Edit the source page's frontmatter.
+pointless — the next `ugraph index` overwrites it. Edit the source page's frontmatter.
 
 Grouping comes from `taxonomy.json`. **Anything not matching a defined group lands under
 `## Other` — nothing is ever silently dropped.** A page missing from its index is a lint
 error, because a page an agent cannot find from an index is a page that does not exist.
 
-`okf index` is deterministic: same KB contents in, byte-identical indexes out. That is
-what makes `okf index --check` usable as a CI gate — if a rebuild would change any file,
+`ugraph index` is deterministic: same KB contents in, byte-identical indexes out. That is
+what makes `ugraph index --check` usable as a CI gate — if a rebuild would change any file,
 the committed indexes are lying about what the KB contains.
 
 ## Validation
 
-### `okf lint` — structural conformance
+### `ugraph lint` — structural conformance
 
 Errors block; warnings inform.
 
@@ -392,16 +392,16 @@ Errors block; warnings inform.
 - transcript in `raw/` with no source page pointing at it
 - `[[wikilink]]` outside the strict tree
 
-### `okf verify` — quote and timestamp verification
+### `ugraph verify` — quote and timestamp verification
 
 **Every `verbatim_quote` must be a literal substring of its transcript, and every
 timestamp must resolve to a real marker in that file.** This is mandatory and automated:
 
 ```bash
-okf verify                    # candidates and pages
-okf verify --candidates-only  # Phase A output in .okf/candidates/
-okf verify --pages-only       # citations in the KB itself
-okf verify --json             # machine-readable; non-zero exit on any issue
+ugraph verify                    # candidates and pages
+ugraph verify --candidates-only  # Phase A output in .ugraph/candidates/
+ugraph verify --pages-only       # citations in the KB itself
+ugraph verify --json             # machine-readable; non-zero exit on any issue
 ```
 
 This is the check the entire format's credibility rests on. Everything else — link
@@ -414,10 +414,10 @@ check did not exist: quote fidelity was an instruction in a prompt and nothing v
 it. Three full extraction rounds ran that way, and `kb_lint.py` reported green the entire
 time — every link resolved, every page was indexed, every required field was present, and
 the structural linter had no opinion whatsoever about whether the quotes were real. Green
-on structure was mistaken for green overall. `okf verify` exists so that mistake is not
+on structure was mistaken for green overall. `ugraph verify` exists so that mistake is not
 available.
 
-Run it in CI alongside `okf lint`. A KB that lints clean and fails verify is not
+Run it in CI alongside `ugraph lint`. A KB that lints clean and fails verify is not
 publishable.
 
 ### What is still manual

@@ -44,7 +44,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
-from okf import store
+from ugraph import store
 
 __all__ = ["QuoteIssue", "verify", "verify_candidates", "verify_pages"]
 

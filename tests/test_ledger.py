@@ -1,14 +1,14 @@
 """
 The ledger derives state from the filesystem and logs transitions separately. The tests
 that matter are the ones proving those two halves cannot disagree with each other, or
-with `okf status`, which reports the same facts in aggregate.
+with `ugraph status`, which reports the same facts in aggregate.
 """
 
 from __future__ import annotations
 
 import json
 
-from okf import indexes, ledger, status, store
+from ugraph import indexes, ledger, status, store
 from tests.test_roundtrip import scaffold
 
 
