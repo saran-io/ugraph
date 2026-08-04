@@ -77,10 +77,26 @@ def cmd_init(args) -> int:
     print(f"Initialized knowledge base at {root}")
     print(f"  wrote SCHEMA.md, taxonomy.json, {len(config_mod.CONTENT_DIRS)} directories")
     print(f"  wrote {cfg_path}")
+
+    # Config resolution walks UP from the working directory, so a bare `okf ingest`
+    # only finds okf.toml when you are at or below its directory. Printing the bare
+    # command here sent people straight into "cannot find a knowledge base" — the very
+    # next thing they ran after a successful init. Emit commands that work from where
+    # the user is actually standing.
+    try:
+        shown = root.relative_to(Path.cwd())
+    except ValueError:
+        shown = root
+    reachable = config_mod.find_config(Path.cwd()) is not None
+    prefix = "" if reachable else f"--kb {shown} "
+
     print()
     print("Next:")
-    print("  okf ingest youtube <channel-url> --limit 25")
-    print("  okf skills install        # agent instructions for the extraction pass")
+    print(f"  okf {prefix}ingest youtube <channel-url> --limit 25")
+    print(f"  okf {prefix}skills install     # agent instructions for the extraction pass")
+    if not reachable:
+        print()
+        print(f"  (or `cd {cfg_path.parent.name}` and drop the --kb flag)")
     return 0
 
 

@@ -150,3 +150,37 @@ def test_config_resolution_errors_are_actionable(tmp_path):
     with pytest.raises(config_mod.ConfigError) as exc:
         config_mod.load(kb=None, start=tmp_path)
     assert "okf init" in str(exc.value)
+
+
+def test_init_suggests_commands_that_actually_run(tmp_path, capsys, monkeypatch):
+    """`okf init vault/kb` writes okf.toml into `vault/`, but config resolution walks
+    UP from the working directory — so a bare `okf ingest` from the parent cannot find
+    it. Printing the bare command sent users straight into "cannot find a knowledge
+    base" as the very next thing they ran after a successful init.
+    """
+    from okf import cli
+
+    workdir = tmp_path / "work"
+    (workdir / "MyVault").mkdir(parents=True)
+    monkeypatch.chdir(workdir)
+
+    args = cli.build_parser().parse_args(["init", "MyVault/knowledge"])
+    assert args.func(args) == 0
+    out = capsys.readouterr().out
+
+    # okf.toml landed in MyVault/, which is below cwd and therefore unreachable.
+    assert (workdir / "MyVault" / "okf.toml").exists()
+    assert "--kb MyVault/knowledge ingest youtube" in out
+    assert "cd MyVault" in out
+
+
+def test_init_omits_the_flag_when_config_is_reachable(tmp_path, capsys, monkeypatch):
+    """Inside a directory the config search can reach, the flag is noise."""
+    from okf import cli
+
+    monkeypatch.chdir(tmp_path)
+    args = cli.build_parser().parse_args(["init", "kb"])
+    assert args.func(args) == 0
+    out = capsys.readouterr().out
+    assert "okf ingest youtube" in out
+    assert "--kb" not in out
