@@ -236,3 +236,75 @@ def test_one_bad_file_does_not_hide_the_rest_of_the_kb(tmp_path):
     assert any(e["check"] == "parse" for e in findings.errors)
     # Both bad files reported, not just the first one encountered.
     assert sum(1 for e in findings.errors if e["check"] == "parse") == 2
+
+
+def _vault_with_notes(tmp_path):
+    """A realistic Obsidian vault: real notes, wikilinks, no frontmatter."""
+    vault = tmp_path / "MyVault"
+    (vault / ".obsidian").mkdir(parents=True)
+    (vault / "Daily Notes").mkdir()
+    (vault / "Daily Notes" / "2026-08-01.md").write_text(
+        "# Monday\n\nSpoke to [[Sarah]] about [[Project Falcon]].\n", encoding="utf-8")
+    (vault / "Sarah.md").write_text("# Sarah\nWorks on [[Project Falcon]]\n",
+                                    encoding="utf-8")
+    return vault
+
+
+def test_init_refuses_an_obsidian_vault_root(tmp_path, capsys, monkeypatch):
+    """The obvious thing a new user tries. Pointing init at the vault root used to
+    scatter concepts/, entities/, raw/ and sources/ among their real folders, write an
+    index.md that could clobber a note, put the config OUTSIDE the vault, and then
+    report every personal note as a malformed page."""
+    from ugraph import cli
+
+    vault = _vault_with_notes(tmp_path)
+    monkeypatch.chdir(vault)
+
+    args = cli.build_parser().parse_args(["init", "."])
+    assert args.func(args) == 1
+
+    out = capsys.readouterr().out
+    assert "Obsidian vault root" in out
+    assert "ugraph init knowledge" in out
+
+    # Nothing was written before the refusal.
+    for created in ("concepts", "entities", "raw", "sources", "SCHEMA.md", "index.md"):
+        assert not (vault / created).exists(), f"init touched the vault: {created}"
+    assert not (vault.parent / "ugraph.toml").exists()
+
+
+def test_init_refuses_a_directory_that_already_has_notes(tmp_path, capsys):
+    """Same protection outside Obsidian — any folder holding someone's markdown."""
+    from ugraph import cli
+
+    notes = tmp_path / "notes"
+    notes.mkdir()
+    (notes / "thing.md").write_text("# hi\n", encoding="utf-8")
+
+    args = cli.build_parser().parse_args(["init", str(notes)])
+    assert args.func(args) == 1
+    out = capsys.readouterr().out
+    assert "already contains markdown files" in out
+    assert not (notes / "concepts").exists()
+
+
+def test_init_into_a_subfolder_of_a_real_vault_is_scoped(tmp_path, monkeypatch):
+    """The documented path. The KB must not see the surrounding vault's notes."""
+    from ugraph import cli
+    from ugraph import config as config_mod
+    from ugraph import lint as lint_mod
+
+    vault = _vault_with_notes(tmp_path)
+    monkeypatch.chdir(vault)
+
+    args = cli.build_parser().parse_args(["init", "knowledge"])
+    assert args.func(args) == 0
+
+    # Config lands inside the vault, not above it.
+    assert (vault / "ugraph.toml").is_file()
+    assert not (vault.parent / "ugraph.toml").exists()
+
+    cfg = config_mod.load(kb=vault / "knowledge")
+    findings, pages = lint_mod.lint(cfg)
+    assert findings.errors == [], findings.errors
+    assert pages == [], "lint reached outside the knowledge base into the vault"

@@ -51,11 +51,26 @@ ugraph status                                # what is extracted, what is pendin
 You now have transcripts and source stubs. To turn them into concepts, see
 [Extraction](#extraction) — that step needs an agent, not a script.
 
-### Connecting it to Obsidian
+### Using it with your Obsidian vault
 
-There is nothing to connect. An OKF bundle *is* a directory of markdown, so point
-`ugraph init` at a folder inside your vault and Obsidian sees it immediately — links resolve,
-backlinks work, the graph view shows the concept cluster.
+There is nothing to connect. An OKF bundle *is* a directory of markdown, so a knowledge
+base inside your vault is visible to Obsidian immediately — links resolve, backlinks work,
+the graph view shows the concept cluster.
+
+```bash
+cd ~/MyVault            # your existing vault, with all your notes
+ugraph init knowledge   # the KB gets its own folder
+ugraph ingest youtube https://youtube.com/@SomeChannel --limit 25
+ugraph lint
+```
+
+**Give it its own folder.** Not the vault root — the knowledge base has a strict schema,
+and `ugraph lint` would report every note you already have as a malformed page. `init`
+refuses a vault root or any directory that already holds markdown, and tells you what to
+run instead. Your existing notes are never read, never linted, never touched.
+
+`ugraph.toml` lands in the vault root, so every command works from anywhere inside the
+vault with no flags.
 
 The one setting worth changing: add `raw/` to **Settings → Files & Links → Excluded files**.
 Transcripts are the audit trail, not reading material, and they will otherwise dominate

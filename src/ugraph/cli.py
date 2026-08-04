@@ -60,6 +60,45 @@ def cmd_init(args) -> int:
         print("  use --force to overwrite the scaffold (content is never touched)")
         return 1
 
+    # A knowledge base needs its own directory. Pointing `init` at an Obsidian vault
+    # root — the obvious thing to try — used to scatter concepts/, entities/, raw/ and
+    # sources/ in among the user's real folders, write an index.md that could clobber
+    # an existing note, drop the config file OUTSIDE the vault, and then report every
+    # personal note as a malformed page. Refuse, and say where to put it instead.
+    if not args.force:
+        suggestion = (root / "knowledge") if root.name != "knowledge" else (root / "kb")
+        try:
+            shown = suggestion.relative_to(Path.cwd())
+        except ValueError:
+            shown = suggestion
+
+        if (root / ".obsidian").is_dir():
+            print(f"ugraph: {root} is an Obsidian vault root.")
+            print()
+            print("  A knowledge base needs its own folder inside the vault, otherwise")
+            print("  its directories land beside your real notes and `ugraph lint` treats")
+            print("  every note you already have as a malformed page.")
+            print()
+            print(f"  Try:  ugraph init {shown}")
+            return 1
+
+        strays = [p for p in root.glob("*.md")
+                  if p.name not in {"SCHEMA.md", "README.md", "index.md"}]
+        strays += [p for p in root.glob("*/*.md")][:1]
+        if strays:
+            print(f"ugraph: {root} already contains markdown files.")
+            for p in strays[:4]:
+                print(f"    {p.relative_to(root)}")
+            if len(strays) > 4:
+                print(f"    … and {len(strays) - 4} more")
+            print()
+            print("  A knowledge base needs an empty directory of its own — `ugraph lint`")
+            print("  would report every one of these as a malformed page.")
+            print()
+            print(f"  Try:  ugraph init {shown}")
+            print("  Or pass --force if this really is meant to be the knowledge base.")
+            return 1
+
     for rel in config_mod.CONTENT_DIRS:
         (root / rel).mkdir(parents=True, exist_ok=True)
 
