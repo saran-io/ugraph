@@ -262,6 +262,56 @@ def cmd_graph(args) -> int:
     return 0
 
 
+
+def cmd_ledger(args) -> int:
+    from okf import ledger as ledger_mod
+    cfg = _config(args)
+
+    if args.action == "record":
+        try:
+            if not args.rec_slug or not args.rec_stage:
+                sys.exit("okf: usage — okf ledger record <slug> <stage>")
+            entry = ledger_mod.record(cfg, args.rec_slug, args.rec_stage,
+                                      by=args.by, detail=args.detail)
+        except ValueError as exc:
+            sys.exit(f"okf: {exc}")
+        print(f"recorded {entry['stage']}  {entry['slug']}")
+        return 0
+
+    if args.slug:
+        events = ledger_mod.history(cfg, args.slug)
+        if not events:
+            print(f"no recorded transitions for {args.slug}")
+            print("  (state is still derived from the files — try `okf ledger --json`)")
+            return 0
+        for e in events:
+            detail = f"  {e['detail']}" if e.get("detail") else ""
+            print(f"  {e['ts']}  {e['stage']:<13} {e.get('by', ''):<22}{detail}")
+        return 0
+
+    items = ledger_mod.collect(cfg)
+    if args.pending:
+        items = [i for i in items if not i.done]
+    if args.stuck is not None:
+        items = [i for i in items if i.stuck and (i.age_days or 0) >= args.stuck]
+        items.sort(key=lambda i: -(i.age_days or 0))
+
+    if args.write:
+        path = ledger_mod.write_report(cfg, ledger_mod.collect(cfg))
+        if args.json:
+            print(json.dumps({"path": str(path)}, indent=2))
+        else:
+            print(f"{len(items)} sources → {path}")
+        return 0
+
+    if args.json:
+        print(ledger_mod.to_json(items))
+        return 0
+
+    print(ledger_mod.render_table(items, limit=args.limit))
+    return 0
+
+
 # ---------------------------------------------------------------------------
 # skills
 # ---------------------------------------------------------------------------
@@ -355,6 +405,25 @@ def build_parser() -> argparse.ArgumentParser:
                     help="concepts, entities and MOCs only — sources usually "
                          "outnumber them and swamp a visual")
     sp.set_defaults(func=cmd_graph)
+
+    sp = sub.add_parser("ledger", help="lifecycle state of every source")
+    sp.add_argument("action", nargs="?", choices=["record"], default=None,
+                    help="`record` appends a transition; omit to view")
+    sp.add_argument("rec_slug", nargs="?", metavar="SLUG",
+                    help="source slug (with `record`)")
+    sp.add_argument("rec_stage", nargs="?", metavar="STAGE",
+                    help="stage name (with `record`)")
+    sp.add_argument("--slug", help="show the recorded history of one source")
+    sp.add_argument("--by", default="", help="what performed the transition")
+    sp.add_argument("--detail", default="", help="free-text note")
+    sp.add_argument("--pending", action="store_true", help="not yet complete")
+    sp.add_argument("--stuck", type=int, metavar="DAYS", nargs="?", const=0,
+                    help="pulled but unprocessed for DAYS+ days")
+    sp.add_argument("--limit", type=int, default=40)
+    sp.add_argument("--write", action="store_true",
+                    help="write a markdown report into the logs directory")
+    sp.add_argument("--json", action="store_true")
+    sp.set_defaults(func=cmd_ledger)
 
     sp = sub.add_parser("skills", help="install the agent instructions")
     sp.add_argument("action", choices=["install"])

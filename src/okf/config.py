@@ -152,7 +152,19 @@ class Config:
 def load(kb: str | Path | None = None, start: Path | None = None) -> Config:
     """Resolve a Config. See module docstring for the resolution order."""
     data: dict[str, Any] = {}
-    config_path = find_config(start)
+
+    # When a KB is named explicitly, look for okf.toml beside *it* before falling back
+    # to the working directory. Searching only from cwd meant the same KB reported
+    # different numbers depending on where the command ran from — `okf --kb X status`
+    # from /tmp disagreed with `okf status` inside the vault, because the second found
+    # the config and the first did not. A scheduled job and a human would then see
+    # different answers about the same files.
+    config_path = None
+    if kb is not None:
+        config_path = find_config(Path(kb).expanduser())
+    if config_path is None:
+        config_path = find_config(start)
+
     if config_path:
         try:
             data = tomllib.loads(config_path.read_text(encoding="utf-8"))
@@ -187,7 +199,10 @@ def load(kb: str | Path | None = None, start: Path | None = None) -> Config:
         if not value:
             return None
         path = Path(value).expanduser()
-        return path if path.is_absolute() else (root / path)
+        # resolve() collapses the `../` that relative-to-KB paths produce, so messages
+        # show `vault/logs` rather than `vault/kb/../logs`. Cosmetic, but these paths
+        # get pasted into shells and issue reports.
+        return path if path.is_absolute() else (root / path).resolve()
 
     return Config(
         kb=root,

@@ -124,8 +124,31 @@ agent runner is a prompt-plumbing exercise, not a rewrite.
 | `okf lint` | Conformance gate. Links, frontmatter, reciprocity, orphans |
 | `okf verify` | **Every quote verbatim? Every timestamp real?** |
 | `okf status` | Extraction progress, canonicalization health |
-| `okf graph` | Export as a graph — JSON, GraphML, or DOT |
+| `okf graph` | Export as a graph — JSON, GraphML, DOT, Canvas, d3 |
+| `okf ledger` | **Where is every source in its lifecycle?** |
 | `okf skills install` | Install the agent instructions into `.claude/skills/` |
+
+### Tracking what is done and what is stuck
+
+```bash
+okf ledger                 # every source and its stage
+okf ledger --stuck 14      # pulled, unprocessed for 14+ days — the work queue
+okf ledger --write         # markdown report into the logs directory
+okf ledger --slug X        # when each stage happened for one source
+```
+
+Stages are the same whatever the source is: `discovered → pulled → extracted →
+synthesized → linked → verified`, plus `skipped` (nothing transferable — a valid end
+state) and `orphaned` (cited by concepts but never pulled, so its quotes cannot be
+checked).
+
+**State is derived from the files, never stored.** A `stage:` field in frontmatter would
+be a second source of truth and would drift the first time a page was edited by hand.
+Transitions are logged separately, because derivation can tell you *where* something is
+but not *when* it got there.
+
+This needs no per-source-type code. Every adapter writes the same `raw/` + `sources/`
+pair, so a blog or newsletter adapter appears in the ledger the day it lands.
 
 `okf status` prints a histogram of concepts by source count. Watch it: a page citing one
 source is a merge candidate, three or more means canonicalization is working. If new

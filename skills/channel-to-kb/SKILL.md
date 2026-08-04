@@ -1,16 +1,16 @@
 ---
 name: channel-to-kb
-description: Extract concepts and entities from ingested YouTube transcripts into the OKF knowledge base at 04_learning/. Use when transcripts exist in raw/ with source pages marked summary_status pending, or when the user asks to process/extract/summarize ingested talks, grow the knowledge base from a channel, or run the extraction pass.
+description: Extract concepts and entities from ingested YouTube transcripts into an OKF knowledge base. Use when transcripts exist in raw/ with source pages marked summary_status pending, or when the user asks to process/extract/summarize ingested talks, grow the knowledge base from a channel, or run the extraction pass.
 ---
 
 # Channel → Knowledge Base (extraction pass)
 
-Stage 2 of the KB pipeline. Stage 1 (`09_ai_agents/agents/channel_ingest.py`) already
+Stage 2 of the KB pipeline. Stage 1 (`okf ingest`) already
 put timestamped transcripts in `raw/` and stub pages in `sources/`. This skill turns
 them into **canonical, cross-linked concept and entity pages**.
 
-Read `04_learning/SCHEMA.md` before writing anything. It is the contract; `kb_lint.py`
-enforces it.
+Read `SCHEMA.md` at the KB root before writing anything. It is the contract;
+`okf lint` enforces it.
 
 ## The one rule that matters
 
@@ -34,29 +34,29 @@ alongside page writing. Splitting lets the expensive reading go parallel while t
 decision that needs global knowledge stays serial.
 
 ```
-Phase A  parallel, one agent per transcript   → 09_ai_agents/candidates/<slug>.json
+Phase A  parallel, one agent per transcript   → <candidates>/<slug>.json
          spec: references/candidate-extraction.md
          emits candidates ONLY — never pages
 Phase B  serial, one context                  → cluster candidates, decide
          create / merge / embed against okf.concept_registry()
 Phase C  parallel, ONE AGENT PER CONCEPT      → write pages
          parallelising by concept, not transcript, makes write conflicts impossible
-Phase D  serial                               → reciprocity, build_indexes, kb_lint
+Phase D  serial                               → reciprocity, okf index, okf lint
 ```
 
 **Never parallelise Phase C by transcript.** Twenty agents reading twenty talks will each
 independently create `context-engineering.md`, and the merge — the entire value of the
 KB — is lost.
 
-Check progress any time with `python3 09_ai_agents/agents/kb_status.py --clusters`.
+Check progress with `okf status --clusters`, or `okf ledger --stuck 0` for the
+per-item work queue.
 
 ## Workflow (single-pass, and Phase B/C of two-phase)
 
 ### 1. Pick the batch
 
 ```bash
-cd 09_ai_agents
-grep -l "summary_status: pending" ../04_learning/sources/**/*.md | head -10
+okf ledger --pending --limit 10
 ```
 
 Default batch size is **10 transcripts**. Larger batches degrade canonicalization —
@@ -64,9 +64,10 @@ you stop noticing that talk 14 and talk 3 are describing the same idea.
 
 ### 2. Load what already exists — before reading any transcript
 
+Read `concepts/index.md` and `entities/index.md` at the KB root, or:
+
 ```bash
-cat ../04_learning/concepts/index.md
-cat ../04_learning/entities/index.md
+okf status --thin        # concepts with one source — the likeliest merge targets
 ```
 
 This is the dedup baseline. You cannot canonicalize against pages you haven't seen,
@@ -103,7 +104,7 @@ single-mention stubs is worse than a smaller dense one.
 Follow SCHEMA.md exactly:
 
 - Frontmatter: `type`, `title`, one-sentence `description`, `domain` (closed vocabulary
-  in `09_ai_agents/runtime/taxonomy.json`), `status`, `sources`, `created`, `updated`
+  in `taxonomy.json`), `status`, `sources`, `created`, `updated`
 - **Relative markdown links only.** No `[[wikilinks]]` anywhere in the OKF tree.
 - Typed relationship headings: `## Prerequisites`, `## Builds on`, `## Contrasts with`,
   `## Implemented by`, `## Related`, `## Sources`
@@ -120,19 +121,37 @@ For each source in the batch:
 - Replace the stub body with a short summary and a `## Concepts extracted` list
   linking to the concept pages you wrote
 
-### 7. Validate
+### 7. Record what you did
+
+The lifecycle ledger derives current state from the files, but it cannot know *when* a
+stage happened or *why* something was set aside. Phases A–C run in an agent rather than
+in Python, so those transitions are only in the ledger if you put them there:
 
 ```bash
-cd 09_ai_agents
-python3 runtime/build_indexes.py
-python3 agents/kb_lint.py
+okf ledger record <source-slug> extracted   --by "phase A"
+okf ledger record <source-slug> synthesized --by "phase C" --detail "fed 3 concepts"
+okf ledger record <source-slug> skipped     --by "phase A" --detail "vendor pitch, no transferable content"
 ```
 
-Both must pass with **0 errors** before you report done. Fix what it reports; do not
+`skipped` matters as much as the others. A talk with nothing in it is *finished*, not
+pending, and without that record it sits in the backlog forever being re-read.
+
+If you defer a talk to a different cluster, record `extracted` with a detail saying
+where it went. That is the difference between "in flight" and "forgotten".
+
+### 8. Validate
+
+```bash
+okf index
+okf lint
+okf verify
+```
+
+All three must pass before you report done — `lint` and `verify` with **0 errors**. Fix what it reports; do not
 hand back a failing KB. Orphan warnings on sources you just processed mean you didn't
 link them from a concept — go back to step 5.
 
-### 8. Report
+### 9. Report
 
 Tell the user, concretely:
 
@@ -169,7 +188,7 @@ A short true page beats a long padded one.
 
 ## Related
 
-- Stage 1 ingestion — `09_ai_agents/agents/channel_ingest.py`
-- Schema contract — `04_learning/SCHEMA.md`
-- Conformance gate — `09_ai_agents/agents/kb_lint.py`
-- Index generation — `09_ai_agents/runtime/build_indexes.py`
+- Stage 1 ingestion — `okf ingest`
+- Schema contract — `SCHEMA.md` at the KB root
+- Conformance gate — `okf lint` · quote verification — `okf verify`
+- Index generation — `okf index` · lifecycle — `okf ledger`

@@ -467,6 +467,18 @@ def ingest(config: Config,
             # work is done and must not be repeated if the next fetch is interrupted.
             _save()
 
+            # Record the transition for the lifecycle ledger. Current state is derived
+            # from the files, so this is not load-bearing for correctness — it exists
+            # so the ledger can answer "when", which the filesystem cannot. Failing to
+            # log must never fail an ingest that already succeeded.
+            try:
+                from okf import ledger
+
+                ledger.record(config, f"{slug_for_channel}/{video_slug}", "pulled",
+                              by="okf ingest youtube", detail=vid)
+            except Exception:  # noqa: BLE001 — bookkeeping must not break ingestion
+                pass
+
             if i < len(batch):
                 time.sleep(sleep)
 
