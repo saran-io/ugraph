@@ -1,0 +1,13 @@
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+dist/
+build/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.DS_Store
+
+# working state — a KB's own .okf/ dir holds candidates, state and logs
+.okf/

@@ -1,0 +1,45 @@
+{
+  "_comment": "Drives index.md grouping and the closed `domain` vocabulary. Edit here, then run build_indexes.py. Anything unmatched lands under 'Other' \u2014 never silently dropped.",
+  "domains": {
+    "agentic_systems": "Agentic Systems",
+    "ai_engineering": "AI Engineering",
+    "rag": "Retrieval & RAG",
+    "local_llms": "Local LLMs",
+    "machine_learning": "Machine Learning",
+    "mathematics": "Mathematics",
+    "system_design": "System Design",
+    "product": "Product & Strategy"
+  },
+  "domain_order": [
+    "agentic_systems",
+    "ai_engineering",
+    "rag",
+    "local_llms",
+    "machine_learning",
+    "mathematics",
+    "system_design",
+    "product"
+  ],
+  "entity_subtypes": {
+    "tool": "Tools",
+    "person": "People",
+    "organization": "Organizations"
+  },
+  "_entity_dirs_comment": "subtype -> directory name. Explicit because naive pluralization gives 'persons'.",
+  "entity_dirs": {
+    "tool": "tools",
+    "person": "people",
+    "organization": "organizations"
+  },
+  "source_types": {
+    "video": "Videos",
+    "talk": "Talks",
+    "paper": "Papers",
+    "article": "Articles",
+    "thread": "Threads",
+    "course": "Courses",
+    "book": "Books"
+  },
+  "_page_types_comment": "Page types beyond the format's built-ins (concept, entity, source, raw-transcript, moc, overview, note). Values list EXTRA required frontmatter fields; `type` and `title` are always required. Built-in types cannot be weakened here \u2014 the toolchain depends on them.",
+  "page_types": {}
+}
