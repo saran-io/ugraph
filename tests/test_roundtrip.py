@@ -273,6 +273,23 @@ def test_init_refuses_an_obsidian_vault_root(tmp_path, capsys, monkeypatch):
     assert not (vault.parent / "ugraph.toml").exists()
 
 
+def test_init_refuses_a_logseq_graph_root_too(tmp_path, capsys, monkeypatch):
+    """The README promises Logseq and Foam work like Obsidian. That has to include the
+    protection, not just the happy path — a Logseq graph root is the same mess."""
+    from ugraph import cli
+
+    graph = tmp_path / "MyGraph"
+    (graph / ".logseq").mkdir(parents=True)
+    (graph / "journals").mkdir()
+    monkeypatch.chdir(graph)
+
+    args = cli.build_parser().parse_args(["init", "."])
+    assert args.func(args) == 1
+    out = capsys.readouterr().out
+    assert "Logseq graph root" in out
+    assert not (graph / "concepts").exists()
+
+
 def test_init_refuses_a_directory_that_already_has_notes(tmp_path, capsys):
     """Same protection outside Obsidian — any folder holding someone's markdown."""
     from ugraph import cli
@@ -308,3 +325,95 @@ def test_init_into_a_subfolder_of_a_real_vault_is_scoped(tmp_path, monkeypatch):
     findings, pages = lint_mod.lint(cfg)
     assert findings.errors == [], findings.errors
     assert pages == [], "lint reached outside the knowledge base into the vault"
+
+
+def test_wizard_never_prompts_when_not_a_terminal(tmp_path, capsys):
+    """CI and scripts must not block on a hidden prompt."""
+    from ugraph import cli
+
+    args = cli.build_parser().parse_args(["init"])
+    try:
+        args.func(args)
+    except SystemExit as exc:
+        assert "needs a path" in str(exc)
+    else:
+        raise AssertionError("bare init should refuse without a TTY")
+
+
+def test_wizard_writes_backend_choice_into_config(tmp_path):
+    from ugraph import wizard
+
+    cfg_path = tmp_path / "ugraph.toml"
+    text = wizard.toml_for(
+        {"kb": tmp_path / "knowledge", "backend": "ollama"}, cfg_path)
+    assert 'kb = "knowledge"' in text
+    assert "[extract]" in text and 'backend = "ollama"' in text
+
+    # "decide later" must not write a backend the user did not choose.
+    plain = wizard.toml_for({"kb": tmp_path / "knowledge", "backend": "later"}, cfg_path)
+    assert "[extract]" not in plain
+
+
+def test_wizard_answers_reach_the_printed_next_steps(tmp_path, monkeypatch, capsys):
+    """Asking which backend and then printing the same generic block for everyone makes
+    the question pointless — somebody who picked Ollama has to be told about
+    `ollama pull`, or the first thing they run fails."""
+    from ugraph import cli, wizard
+
+    vault = _vault_with_notes(tmp_path)
+    monkeypatch.chdir(vault)
+    monkeypatch.setattr(wizard, "interactive", lambda: True)
+    monkeypatch.setattr(wizard, "run", lambda: {
+        "kb": vault / "knowledge", "channel": None, "backend": "ollama"})
+
+    args = cli.build_parser().parse_args(["init"])
+    assert args.func(args) == 0
+
+    out = capsys.readouterr().out
+    assert "ollama pull" in out
+    assert "extract --backend ollama" in out
+    assert "skills install" not in out          # that is the Claude Code path
+
+
+def test_a_failed_ingest_still_leaves_a_working_kb(tmp_path, monkeypatch, capsys):
+    """The wizard offers to ingest. Without yt-dlp that step cannot run — but it must
+    not take the scaffold down with it, and the URL already given must come back in the
+    retry command rather than being retyped."""
+    from ugraph import cli, wizard
+    from ugraph.sources import youtube
+
+    vault = _vault_with_notes(tmp_path)
+    monkeypatch.chdir(vault)
+    monkeypatch.setattr(wizard, "interactive", lambda: True)
+    monkeypatch.setattr(wizard, "run", lambda: {
+        "kb": vault / "knowledge", "channel": "https://youtube.com/@x",
+        "limit": 10, "backend": "later"})
+
+    def no_ytdlp(*a, **k):
+        raise FileNotFoundError("yt-dlp")
+    monkeypatch.setattr(youtube, "ingest", no_ytdlp)
+
+    args = cli.build_parser().parse_args(["init"])
+    assert args.func(args) == 0
+
+    out = capsys.readouterr().out
+    assert "yt-dlp is not installed" in out
+    assert "ugraph ingest youtube https://youtube.com/@x --limit 10" in out
+    assert (vault / "knowledge" / "SCHEMA.md").is_file()
+
+
+def test_wizard_finds_vaults_by_marker(tmp_path):
+    """Obsidian, Logseq and Foam are all just markdown — the marker only gives a
+    better default, it is not a compatibility requirement."""
+    from ugraph import wizard
+
+    for marker in (".obsidian", ".logseq", ".foam"):
+        vault = tmp_path / marker.strip(".")
+        (vault / marker).mkdir(parents=True)
+        nested = vault / "a" / "b"
+        nested.mkdir(parents=True)
+        assert wizard.find_vault(nested) == vault
+
+    plain = tmp_path / "nothing"
+    plain.mkdir()
+    assert wizard.find_vault(plain) is None

@@ -40,8 +40,18 @@ brew install yt-dlp   # or: uv tool install yt-dlp / pipx install yt-dlp
 ## Quickstart
 
 ```bash
-cd ~/vault                                  # anywhere at or above the KB
-ugraph init knowledge                       # scaffold (SCHEMA.md, taxonomy, dirs)
+cd ~/MyVault      # or anywhere; a knowledge base is just a folder
+ugraph init       # asks three questions, writes ugraph.toml, scaffolds
+```
+
+`init` with no arguments is interactive. It looks for an enclosing vault, asks where the
+KB should live, which channel to ingest, and what will run the model — then prints the
+exact next commands for the answers you gave. Every question is also a flag, so
+`ugraph init knowledge` still works and CI never sees a prompt.
+
+Then:
+
+```bash
 ugraph ingest youtube https://youtube.com/@SomeChannel --limit 50
 ugraph index                                 # regenerate navigation
 ugraph lint                                  # conformance gate — must be 0 errors
@@ -49,17 +59,24 @@ ugraph status                                # what is extracted, what is pendin
 ```
 
 You now have transcripts and source stubs. To turn them into concepts, see
-[Extraction](#extraction) — that step needs an agent, not a script.
+[Extraction](#extraction) — that step needs a model, and you choose which one.
 
-### Using it with your Obsidian vault
+### Using it with your notes app
 
-There is nothing to connect. An OKF bundle *is* a directory of markdown, so a knowledge
-base inside your vault is visible to Obsidian immediately — links resolve, backlinks work,
-the graph view shows the concept cluster.
+There is nothing to connect. A knowledge base here *is* a directory of markdown files
+with relative links, so anything that reads a folder of markdown sees it immediately —
+links resolve, backlinks work, graph views show the concept cluster.
+
+| | |
+|---|---|
+| **Obsidian** | Works today. `init` detects `.obsidian` and offers the vault as the base |
+| **Logseq**, **Foam** | Same — detected by `.logseq` / `.foam`, no configuration |
+| **Plain git / VS Code / anything** | Works. There is no vault requirement at all |
+| **Notion** | Not supported. Needs a real adapter — see below |
 
 ```bash
 cd ~/MyVault            # your existing vault, with all your notes
-ugraph init knowledge   # the KB gets its own folder
+ugraph init             # the KB gets its own folder inside it
 ugraph ingest youtube https://youtube.com/@SomeChannel --limit 25
 ugraph lint
 ```
@@ -72,12 +89,14 @@ run instead. Your existing notes are never read, never linted, never touched.
 `ugraph.toml` lands in the vault root, so every command works from anywhere inside the
 vault with no flags.
 
-The one setting worth changing: add `raw/` to **Settings → Files & Links → Excluded files**.
-Transcripts are the audit trail, not reading material, and they will otherwise dominate
-search results.
+For Obsidian, one setting is worth changing: add `raw/` to **Settings → Files & Links →
+Excluded files**. Transcripts are the audit trail, not reading material, and they will
+otherwise dominate search results.
 
-Notion is not supported yet. It is a real adapter rather than a no-op, and it fights the
-format — relative links and no-database is the premise, not an implementation detail.
+Notion is the one case that needs code rather than a folder. Its pages are rows in a
+database behind an API, so relative links, `git diff`, and grep — the whole premise — do
+not survive the trip. A sync adapter is possible and is not written; the format stays
+markdown-first either way.
 
 ---
 
@@ -115,7 +134,18 @@ re-reading transcripts. Cost stays near 1× the corpus instead of 3×.
 
 ## Extraction
 
-The agent instructions ship with the package:
+**ugraph itself never calls a model.** No API key is required to install it, and nothing
+phones home. Ingesting, indexing, linting, verifying, the ledger and the graph are all
+deterministic Python over your files. Turning transcripts into concepts is the one step
+that needs a model, and you pick which:
+
+| Backend | What it costs | What it can do |
+|---|---|---|
+| `claude-code` | You already have it | Every phase, best quality — this is the default |
+| `api` | Your Anthropic or OpenAI key | Phase A; needs `pip install 'ugraph-kit[api]'` |
+| `ollama` | Nothing. Local and private | Phase A only |
+
+### With Claude Code
 
 ```bash
 ugraph skills install                # copies skills/ into ./.claude/skills/
@@ -123,11 +153,32 @@ ugraph skills install                # copies skills/ into ./.claude/skills/
 
 Then in Claude Code: `/channel-to-kb`. The skill covers batch selection, the
 create-vs-merge threshold, and the citation format. `skills/channel-to-kb/references/candidate-extraction.md`
-is the Phase A spec — read it before pointing any other harness at this.
+is the Phase A spec — read it before pointing any other harness at this. The specs are
+plain markdown with no Claude-specific syntax, so adapting them to another agent runner is
+prompt plumbing, not a rewrite.
 
-It is written for Claude Code because that is what it was built and tested against. The
-specs are plain markdown and carry no Claude-specific syntax, so adapting them to another
-agent runner is a prompt-plumbing exercise, not a rewrite.
+### With a local model or an API key
+
+```bash
+ollama pull qwen2.5-coder:7b
+ugraph extract --backend ollama --limit 10     # or: --backend api
+```
+
+This runs **Phase A only** — one transcript at a time, out to candidate JSON.
+
+**Why a 7B model is safe here.** Every quote a model returns is checked against the
+transcript before anything is written: a quote that is not a literal substring is
+rejected, and so is a timestamp the transcript does not contain. A model that paraphrases
+gets caught by a substring test rather than trusted. Rejected concepts are dropped and the
+transcript is retried; a model that fails three times is the wrong model. Measured on this
+machine: `qwen2.5-coder:7b` extracted 5 concepts from one 45-minute talk in about 7
+minutes, all verbatim, none rejected.
+
+**Why Phase B is not offered locally.** Deciding that ten candidates are one concept needs
+every candidate in view at once, and there is no mechanical check for getting it wrong.
+`ugraph verify` catches a fabricated quote; nothing catches bad judgement. That step wants
+a strong model and a human looking at the result — so `ugraph extract` does not pretend to
+do it.
 
 ---
 
@@ -135,8 +186,9 @@ agent runner is a prompt-plumbing exercise, not a rewrite.
 
 | | |
 |---|---|
-| `ugraph init PATH` | Scaffold a KB — `SCHEMA.md`, `taxonomy.json`, directories |
+| `ugraph init [PATH]` | Scaffold a KB. Interactive with no arguments |
 | `ugraph ingest youtube URL` | Fetch transcripts. Incremental and resumable |
+| `ugraph extract` | Phase A via a local or API model, behind the verbatim gate |
 | `ugraph index` | Regenerate every `index.md`. Deterministic; `--check` for CI |
 | `ugraph lint` | Conformance gate. Links, frontmatter, reciprocity, orphans |
 | `ugraph verify` | **Every quote verbatim? Every timestamp real?** |
@@ -226,6 +278,10 @@ Below that it is infrastructure you maintain instead of using.
 ```toml
 kb = "knowledge"
 taxonomy = "taxonomy.json"
+
+[extract]                        # optional; written by `ugraph init`
+backend = "ollama"               # claude-code | api | ollama
+model = "qwen2.5-coder:7b"
 ```
 
 `taxonomy.json` holds the closed vocabulary — domains, entity subtypes, source types — and

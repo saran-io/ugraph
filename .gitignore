@@ -14,3 +14,6 @@ build/
 kb-graph.html
 *.canvas
 ugraph.toml
+
+# `ugraph skills install` writes here; the source of truth is skills/
+.claude/

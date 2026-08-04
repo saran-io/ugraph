@@ -49,6 +49,15 @@ def _bundled(name: str) -> Path:
 # ---------------------------------------------------------------------------
 
 def cmd_init(args) -> int:
+    answers = None
+    if not args.path:
+        from ugraph import wizard
+        if not wizard.interactive():
+            sys.exit("ugraph: init needs a path when not run interactively\n"
+                     "  e.g.  ugraph init ./knowledge")
+        answers = wizard.run()
+        args.path = str(answers["kb"])
+
     root = Path(args.path).expanduser().resolve()
     templates = _bundled("templates")
 
@@ -72,8 +81,14 @@ def cmd_init(args) -> int:
         except ValueError:
             shown = suggestion
 
-        if (root / ".obsidian").is_dir():
-            print(f"ugraph: {root} is an Obsidian vault root.")
+        # Any of the markdown note apps, not just Obsidian — a Logseq user pointing
+        # init at their graph root hits exactly the same mess.
+        marker = next((m for m in (".obsidian", ".logseq", ".foam")
+                       if (root / m).is_dir()), None)
+        if marker:
+            app = {".obsidian": "an Obsidian vault", ".logseq": "a Logseq graph",
+                   ".foam": "a Foam workspace"}[marker]
+            print(f"ugraph: {root} is {app} root.")
             print()
             print("  A knowledge base needs its own folder inside the vault, otherwise")
             print("  its directories land beside your real notes and `ugraph lint` treats")
@@ -107,7 +122,11 @@ def cmd_init(args) -> int:
 
     cfg_path = root.parent / config_mod.CONFIG_FILENAME
     if not cfg_path.exists():
-        cfg_path.write_text(f'kb = "{root.name}"\n', encoding="utf-8")
+        from ugraph import wizard
+        cfg_path.write_text(
+            wizard.toml_for(answers, cfg_path) if answers
+            else f'kb = "{root.name}"\n',
+            encoding="utf-8")
 
     from ugraph import indexes
     cfg = config_mod.load(kb=root)
@@ -116,6 +135,17 @@ def cmd_init(args) -> int:
     print(f"Initialized knowledge base at {root}")
     print(f"  wrote SCHEMA.md, taxonomy.json, {len(config_mod.CONTENT_DIRS)} directories")
     print(f"  wrote {cfg_path}")
+
+    # The wizard asked which model backend and whether to ingest a channel. Answering
+    # those and then printing the same generic block as a bare `init` wastes the only
+    # thing the questions were for — somebody who picked Ollama needs to hear about
+    # `ollama pull`, not about skills install.
+    if answers:
+        if answers.get("channel"):
+            _ingest_from_init(cfg, answers)
+        from ugraph import wizard
+        print(wizard.summary(answers, cfg_path))
+        return 0
 
     # Config resolution walks UP from the working directory, so a bare `ugraph ingest`
     # only finds ugraph.toml when you are at or below its directory. Printing the bare
@@ -137,6 +167,39 @@ def cmd_init(args) -> int:
         print()
         print(f"  (or `cd {cfg_path.parent.name}` and drop the --kb flag)")
     return 0
+
+
+def _ingest_from_init(cfg, answers: dict) -> None:
+    """Fetch the channel the wizard asked about, if the user named one.
+
+    Asking "which channel to ingest" and then only printing a command to type is a
+    question that did nothing. But this must never abort a successful scaffold: a
+    missing yt-dlp or a dead network leaves a perfectly good empty KB, so failures
+    here degrade to the command the user can run later.
+    """
+    from ugraph.sources import youtube
+
+    url, limit = answers["channel"], answers.get("limit", 25)
+    print(f"\nFetching up to {limit} transcripts from {url} …")
+
+    def progress(i, total, vid, title):
+        print(f"  [{i}/{total}] {title[:58]}")
+
+    try:
+        result = youtube.ingest(cfg, url, limit=limit, progress=progress)
+    except FileNotFoundError:
+        answers["retry_channel"] = answers["channel"]
+        answers["channel"] = None  # so the summary prints the ingest command again
+        print("  yt-dlp is not installed — skipping for now.")
+        print("  Install it (brew install yt-dlp) and run the ingest command below.")
+        return
+    except Exception as exc:
+        answers["channel"] = None
+        print(f"  ingest failed: {exc}")
+        print("  The knowledge base is fine — run the ingest command below when ready.")
+        return
+
+    print(f"  ingested {result['written']}, skipped {result['skipped']}")
 
 
 # ---------------------------------------------------------------------------
@@ -355,6 +418,59 @@ def cmd_ledger(args) -> int:
     return 0
 
 
+
+def cmd_extract(args) -> int:
+    from ugraph import extract as extract_mod
+    cfg = _config(args)
+
+    settings = cfg.raw.get("extract", {}) or {}
+    backend_name = args.backend or settings.get("backend") or "claude-code"
+    model = args.model or settings.get("model")
+
+    # claude-code is not something this process can drive — the agent does the work.
+    # Say so plainly rather than pretending to dispatch it.
+    if backend_name == "claude-code":
+        pending = extract_mod.pending_sources(cfg)
+        print(f"{len(pending)} source(s) waiting to be extracted.")
+        print()
+        print("The claude-code backend runs in your agent, not here:")
+        print("    ugraph skills install")
+        print("    then in Claude Code:  /channel-to-kb")
+        print()
+        print("To have ugraph do the extraction itself instead:")
+        print("    ugraph extract --backend ollama    # local, free")
+        print("    ugraph extract --backend api       # ANTHROPIC_API_KEY / OPENAI_API_KEY")
+        return 0
+
+    try:
+        backend = extract_mod.make_backend(backend_name, model)
+    except extract_mod.BackendError as exc:
+        sys.exit(f"ugraph: {exc}")
+
+    def progress(i, total, slug, title):
+        print(f"[{i}/{total}] {title[:62]}")
+
+    result = extract_mod.run(cfg, backend, limit=args.limit, progress=progress)
+
+    if args.json:
+        payload = {k: v for k, v in result.items() if k != "results"}
+        print(json.dumps(payload, indent=2))
+        return 1 if result["failed"] else 0
+
+    print()
+    print(f"Extracted {result['written']}/{result['attempted']} "
+          f"→ {result['concepts']} candidate concepts")
+    if result["rejected"]:
+        # Not a warning about the KB — a measurement of the model. The gate did its job.
+        print(f"  {result['rejected']} candidate(s) rejected as not verbatim")
+    for failure in result["failed"]:
+        print(f"  FAILED {failure['slug']}: {failure['error']}")
+    if result["written"]:
+        print()
+        print("Next: the merge step needs an agent — see `ugraph skills install`")
+    return 1 if result["failed"] else 0
+
+
 # ---------------------------------------------------------------------------
 # skills
 # ---------------------------------------------------------------------------
@@ -398,7 +514,8 @@ def build_parser() -> argparse.ArgumentParser:
     sub = p.add_subparsers(dest="command", required=True)
 
     sp = sub.add_parser("init", help="scaffold a new knowledge base")
-    sp.add_argument("path")
+    sp.add_argument("path", nargs="?",
+                    help="where to create it; omit for the interactive setup")
     sp.add_argument("--force", action="store_true", help="overwrite an existing scaffold")
     sp.set_defaults(func=cmd_init)
 
@@ -467,6 +584,14 @@ def build_parser() -> argparse.ArgumentParser:
                     help="write a markdown report into the logs directory")
     sp.add_argument("--json", action="store_true")
     sp.set_defaults(func=cmd_ledger)
+
+    sp = sub.add_parser("extract", help="model-driven candidate extraction (Phase A)")
+    sp.add_argument("--backend", choices=["claude-code", "ollama", "api"],
+                    help="default: [extract].backend in ugraph.toml, else claude-code")
+    sp.add_argument("--model", help="override the backend's model")
+    sp.add_argument("--limit", type=int, default=10, help="max sources this run")
+    sp.add_argument("--json", action="store_true")
+    sp.set_defaults(func=cmd_extract)
 
     sp = sub.add_parser("skills", help="install the agent instructions")
     sp.add_argument("action", choices=["install"])

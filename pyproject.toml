@@ -32,6 +32,9 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=7.0", "ruff>=0.4"]
+# Only needed for `ugraph extract --backend api`. The core, and the local ollama
+# backend, stay dependency-free on purpose.
+api = ["anthropic>=0.40", "openai>=1.40"]
 
 [project.urls]
 Homepage = "https://github.com/saran-io/ugraph-kit"
@@ -56,6 +59,7 @@ only-include = [
     "README.md",
     "LICENSE",
     "CONTRIBUTING.md",
+    "CHANGELOG.md",
     "pyproject.toml",
 ]
 
