@@ -184,3 +184,26 @@ def test_init_omits_the_flag_when_config_is_reachable(tmp_path, capsys, monkeypa
     out = capsys.readouterr().out
     assert "okf ingest youtube" in out
     assert "--kb" not in out
+
+
+def test_configured_candidates_path_resolves_against_the_kb(tmp_path, monkeypatch):
+    """A relative `candidates` path in okf.toml must resolve against the KB, not the
+    working directory — otherwise the setting appears to do nothing, or something
+    different, depending on where the command was run from."""
+    kb = tmp_path / "vault" / "kb"
+    kb.mkdir(parents=True)
+    (tmp_path / "vault" / "okf.toml").write_text(
+        'kb = "kb"\ncandidates = "../tooling/candidates"\n', encoding="utf-8")
+
+    monkeypatch.chdir(tmp_path)
+    cfg = config_mod.load(start=tmp_path / "vault")
+    assert cfg.candidates == (tmp_path / "vault" / "tooling" / "candidates").resolve()
+
+    monkeypatch.chdir(tmp_path / "vault")
+    assert config_mod.load(start=tmp_path / "vault").candidates == cfg.candidates
+
+
+def test_default_candidates_sit_outside_the_kb(tmp_path):
+    """Phase A output is working state, not knowledge — it must not be linted."""
+    cfg = scaffold(tmp_path)
+    assert cfg.kb not in cfg.candidates.parents

@@ -106,8 +106,18 @@ class Config:
     @property
     def candidates(self) -> Path:
         """Phase A output. Deliberately outside the KB — these are working files,
-        not knowledge, and should not be linted or indexed as pages."""
-        return Path(self.raw.get("candidates", self.kb.parent / ".okf" / "candidates"))
+        not knowledge, and should not be linted or indexed as pages.
+
+        A configured relative path resolves against the KB root, like every other
+        path in okf.toml. Returning it unresolved made `candidates = "some/dir"`
+        silently resolve against the working directory instead, so the setting
+        appeared to do nothing depending on where you ran the command from.
+        """
+        configured = self.raw.get("candidates")
+        if not configured:
+            return self.kb.parent / ".okf" / "candidates"
+        path = Path(configured).expanduser()
+        return path if path.is_absolute() else (self.kb / path).resolve()
 
     @property
     def state(self) -> Path:
