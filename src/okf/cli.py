@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import shutil
 import sys
 from pathlib import Path
@@ -342,6 +343,14 @@ def main(argv: list[str] | None = None) -> int:
     except KeyboardInterrupt:
         print("\ninterrupted", file=sys.stderr)
         return 130
+    except BrokenPipeError:
+        # A downstream reader closed the pipe — `okf graph | head`, `| jq .nodes[0]`.
+        # That is normal usage, not an error, but Python will also try to flush stdout
+        # on exit and raise a second time. Pointing the fd at devnull first is the
+        # documented way to exit quietly.
+        devnull = os.open(os.devnull, os.O_WRONLY)
+        os.dup2(devnull, sys.stdout.fileno())
+        return 141  # 128 + SIGPIPE, what a shell expects
 
 
 if __name__ == "__main__":
