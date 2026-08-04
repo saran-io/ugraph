@@ -222,11 +222,19 @@ def cmd_status(args) -> int:
 def cmd_graph(args) -> int:
     from okf import graph as graph_mod
     cfg = _config(args)
-    g = graph_mod.build(cfg, include_provenance=not args.no_provenance)
+    types = {"concept", "entity", "moc"} if args.concepts_only else None
+    g = graph_mod.build(cfg, include_provenance=not args.no_provenance, types=types)
     try:
-        rendered = graph_mod.render(g, args.format)
+        if args.format == "d3":
+            rendered = graph_mod.to_d3(g)
+        else:
+            rendered = graph_mod.render(g, args.format, config=cfg)
     except ValueError as exc:
         sys.exit(f"okf: {exc}")
+
+    if args.format == "canvas" and graph_mod.find_vault_root(cfg) is None:
+        print("  [warn] no .obsidian found above the KB — canvas file paths may not "
+              "resolve. Open the .canvas from inside your vault.", file=sys.stderr)
 
     if args.out:
         out = Path(args.out)
@@ -321,10 +329,15 @@ def build_parser() -> argparse.ArgumentParser:
     sp.set_defaults(func=cmd_status)
 
     sp = sub.add_parser("graph", help="export the KB as a graph (derived view)")
-    sp.add_argument("--format", choices=["json", "graphml", "dot"], default="json")
+    sp.add_argument("--format", default="json",
+                    choices=["json", "graphml", "dot", "canvas", "obsidian-groups", "d3"],
+                    help="canvas = Obsidian Canvas; d3 = standalone interactive HTML")
     sp.add_argument("--out", metavar="PATH", help="write to a file instead of stdout")
     sp.add_argument("--no-provenance", action="store_true",
                     help="drop concept→source edges; clearer for diagramming")
+    sp.add_argument("--concepts-only", action="store_true",
+                    help="concepts, entities and MOCs only — sources usually "
+                         "outnumber them and swamp a visual")
     sp.set_defaults(func=cmd_graph)
 
     sp = sub.add_parser("skills", help="install the agent instructions")

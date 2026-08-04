@@ -11,3 +11,4 @@ build/
 
 # working state — a KB's own .okf/ dir holds candidates, state and logs
 .okf/
+kb-graph.html

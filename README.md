@@ -147,10 +147,23 @@ everything.
 So export the graph rather than becoming one:
 
 ```bash
-okf graph --format json                    # nodes + typed edges
-okf graph --format graphml --out kb.graphml   # Gephi, yEd, Neo4j import
-okf graph --format dot --no-provenance     # Graphviz, readable layout
+okf graph --format json                       # nodes + typed edges
+okf graph --format canvas --concepts-only \
+          --out ~/vault/"Concept Graph.canvas"   # Obsidian Canvas, natively
+okf graph --format d3 --out kb.html            # standalone interactive page
+okf graph --format graphml --out kb.graphml    # Gephi, yEd, Neo4j import
+okf graph --format dot --no-provenance         # Graphviz
+okf graph --format obsidian-groups             # colour Obsidian's own graph view
 ```
+
+**Obsidian Canvas is the best native target**, and better than Obsidian's graph view:
+nodes are `file` nodes pointing at the real pages, so clicking one opens the note, and
+edges carry the relationship name — which the built-in graph view cannot show. The canvas
+must live inside the vault, since Canvas stores vault-relative paths.
+
+`--concepts-only` matters for anything visual. Sources usually outnumber concepts several
+times over, so an unfiltered picture is mostly provenance and the idea structure
+disappears into it.
 
 **Markdown stays the source of truth; the graph is derived and disposable.** Regenerating
 costs milliseconds, so there is no reason to let a second system become authoritative,
