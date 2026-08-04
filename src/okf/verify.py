@@ -151,7 +151,6 @@ class _Transcript:
     flat: str
     folded: str
     starts: List[int]
-    ends: List[int]
     stamps: List[int]
     by_stamp: Dict[int, List[int]]
 
@@ -205,7 +204,6 @@ def _parse_transcript(path: Path) -> Tuple[Optional[_Transcript], str]:
 
     parts: List[str] = []
     starts: List[int] = []
-    ends: List[int] = []
     stamps: List[int] = []
     by_stamp: Dict[int, List[int]] = {}
     cursor = 0
@@ -214,9 +212,7 @@ def _parse_transcript(path: Path) -> Tuple[Optional[_Transcript], str]:
         if not norm:
             continue
         starts.append(cursor)
-        cursor += len(norm)
-        ends.append(cursor)
-        cursor += 1  # the space that `" ".join` will insert
+        cursor += len(norm) + 1  # +1 for the space `" ".join` will insert
         by_stamp.setdefault(seconds, []).append(len(stamps))
         stamps.append(seconds)
         parts.append(norm)
@@ -230,7 +226,6 @@ def _parse_transcript(path: Path) -> Tuple[Optional[_Transcript], str]:
         flat=flat,
         folded=_fold(flat),
         starts=starts,
-        ends=ends,
         stamps=stamps,
         by_stamp=by_stamp,
     ), ""
@@ -599,7 +594,7 @@ def _source_slug(config, source_path: Path, meta: dict) -> str:
         return source_path.stem
 
 
-def _expected_transcript(config, source_path: Path, meta: dict) -> Tuple[Optional[Path], bool]:
+def _expected_transcript(source_path: Path, meta: dict) -> Tuple[Optional[Path], bool]:
     """(path, expected). A hand-written page or an article has no transcript and that
     is not a defect; only a declared video is expected to have one."""
     raw_value = str(meta.get("raw") or "").strip()
@@ -717,7 +712,7 @@ def _check_citation(config, cache: _Cache, page: Path, file_rel: str,
 
     meta = cache.source_meta(source_path)
     source = _source_slug(config, source_path, meta)
-    raw_path, expected = _expected_transcript(config, source_path, meta)
+    raw_path, expected = _expected_transcript(source_path, meta)
     if not expected:
         return issues
 

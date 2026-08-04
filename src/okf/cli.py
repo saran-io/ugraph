@@ -218,6 +218,25 @@ def cmd_status(args) -> int:
     return 0
 
 
+def cmd_graph(args) -> int:
+    from okf import graph as graph_mod
+    cfg = _config(args)
+    g = graph_mod.build(cfg, include_provenance=not args.no_provenance)
+    try:
+        rendered = graph_mod.render(g, args.format)
+    except ValueError as exc:
+        sys.exit(f"okf: {exc}")
+
+    if args.out:
+        out = Path(args.out)
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(rendered, encoding="utf-8")
+        print(f"{len(g['nodes'])} nodes, {len(g['edges'])} edges → {out}")
+    else:
+        print(rendered)
+    return 0
+
+
 # ---------------------------------------------------------------------------
 # skills
 # ---------------------------------------------------------------------------
@@ -299,6 +318,13 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--thin", action="store_true", help="single-source concepts")
     sp.add_argument("--json", action="store_true")
     sp.set_defaults(func=cmd_status)
+
+    sp = sub.add_parser("graph", help="export the KB as a graph (derived view)")
+    sp.add_argument("--format", choices=["json", "graphml", "dot"], default="json")
+    sp.add_argument("--out", metavar="PATH", help="write to a file instead of stdout")
+    sp.add_argument("--no-provenance", action="store_true",
+                    help="drop concept→source edges; clearer for diagramming")
+    sp.set_defaults(func=cmd_graph)
 
     sp = sub.add_parser("skills", help="install the agent instructions")
     sp.add_argument("action", choices=["install"])

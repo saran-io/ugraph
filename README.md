@@ -124,11 +124,45 @@ agent runner is a prompt-plumbing exercise, not a rewrite.
 | `okf lint` | Conformance gate. Links, frontmatter, reciprocity, orphans |
 | `okf verify` | **Every quote verbatim? Every timestamp real?** |
 | `okf status` | Extraction progress, canonicalization health |
+| `okf graph` | Export as a graph — JSON, GraphML, or DOT |
 | `okf skills install` | Install the agent instructions into `.claude/skills/` |
 
 `okf status` prints a histogram of concepts by source count. Watch it: a page citing one
 source is a merge candidate, three or more means canonicalization is working. If new
 clusters stop producing merges, the wiki has quietly become a folder again.
+
+---
+
+## Do I need a graph database?
+
+Almost certainly not, and the honest answer is worth stating because the alternative is
+fashionable.
+
+A knowledge base in this format **already is a graph** — pages are nodes, typed
+relationship headings are labelled edges, and `okf lint` enforces bidirectionality. What
+it lacks is a *query engine*. Traversal answers "what relates to X." It cannot answer
+"which concepts cite only one source and appear in two clusters" without walking
+everything.
+
+So export the graph rather than becoming one:
+
+```bash
+okf graph --format json                    # nodes + typed edges
+okf graph --format graphml --out kb.graphml   # Gephi, yEd, Neo4j import
+okf graph --format dot --no-provenance     # Graphviz, readable layout
+```
+
+**Markdown stays the source of truth; the graph is derived and disposable.** Regenerating
+costs milliseconds, so there is no reason to let a second system become authoritative,
+drift from the files, and turn `git diff` into something you cannot read.
+
+For scale: a KB of ~230 pages exports to roughly 64 KB. That fits in a model's context
+window whole — often it is simpler to hand an agent the entire graph than to give it a
+query language.
+
+A real graph database earns its place when you have genuinely fragmented sources across
+many systems, node counts in the thousands, and aggregate workloads as the *primary* use.
+Below that it is infrastructure you maintain instead of using.
 
 ---
 
