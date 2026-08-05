@@ -508,6 +508,11 @@ _CITATION_RE = re.compile(
 _MD_LINK_RE = re.compile(r"\[([^\]\n]*)\]\([^)\n]*\)")
 _MD_EMPHASIS_RE = re.compile(r"[*`]+")
 _QUOTED_RE = re.compile(r'"([^"]+)"')
+#: A citation that has already closed, seen after markdown stripping reduces
+#: `([Title](path.md) @ 00:06:10)` to `(Title @ 00:06:10)`. Used to stop a quote search
+#: from reaching back past a citation that already claimed that quote.
+_PRIOR_CITATION_RE = re.compile(r"@\s*\d{1,3}:\d{2}(?::\d{2})?\s*\)")
+
 _BLOCK_START_RE = re.compile(r"^\s*(?:[-*+]\s|\d+[.)]\s|#{1,6}\s|\|)")
 _ATTRIBUTION_RE = re.compile(r"\s-\s[^.?!\"]{0,60}$")
 
@@ -556,6 +561,15 @@ def _quotation_before(block: Sequence[str], is_quote: bool,
         # Guessing which text it attaches to is exactly how false positives are made.
         return None
     head = text.split(needle)[0]
+
+    # A quotation that already has its own citation belongs to that citation. Without
+    # this, a paragraph that quotes a speaker, cites them, and then goes on to make an
+    # unquoted claim with a second citation gets the *first* quote checked against the
+    # *second* timestamp — and reported as a mismatch on a page that is entirely
+    # correct. Stop at the previous citation instead of scanning to the paragraph start.
+    prior = list(_PRIOR_CITATION_RE.finditer(head))
+    if prior:
+        head = head[prior[-1].end():]
 
     if head.count('"') % 2 == 1:
         # An unbalanced quote means the paragraph continues a quotation opened
