@@ -53,12 +53,28 @@ def test_line_wrapping_does_not_count_as_paraphrase():
     assert len(kept) == 1, rejected
 
 
-def test_invented_timestamp_is_rejected():
+def test_a_wrong_timestamp_is_corrected_not_rejected():
+    """A verbatim quote tells us exactly which paragraph it came from, so a bad marker
+    is a recoverable field on a good concept — not a reason to throw the concept away.
+
+    The observed local-model failure was naming the *next* marker, consistently. The
+    old behaviour rejected those, which discarded correct extractions over a number we
+    can simply compute."""
     kept, rejected = extract.gate(
         _candidate(verbatim_quote="context windows degrade", timestamp="00:09:99"),
         TRANSCRIPT)
-    assert kept == []
-    assert "timestamp" in rejected[0]
+    assert rejected == []
+    assert kept[0]["timestamp"] == "00:00:31"
+
+
+def test_the_gate_is_not_weaker_than_the_verifier():
+    """`verify` requires a quote to sit in the paragraph its citation names. If the gate
+    only checked the marker existed *somewhere*, extract would write candidate files
+    that verify immediately rejects — the tool contradicting itself."""
+    cand = _candidate(verbatim_quote="we treat the window as a budget",
+                      timestamp="00:00:00")   # a real marker, but the wrong one
+    kept, _ = extract.gate(cand, TRANSCRIPT)
+    assert kept[0]["timestamp"] == "00:01:04"
 
 
 def test_empty_quote_is_rejected():
@@ -177,6 +193,45 @@ def test_extraction_writes_a_candidate_and_records_the_transition(tmp_path):
     written = json.loads((cfg.candidates / "example-talk.json").read_text())
     assert written["concepts"][0]["name"] == "context budget"
     assert ledger.history(cfg, "demo/example-talk")[0]["stage"] == "extracted"
+
+
+def test_context_window_grows_with_the_transcript():
+    """Ollama defaults to 4096 tokens whatever the model supports, truncates the prompt
+    from the front rather than erroring, and the schema is the first thing lost — so
+    the model answers in a format it invented. Sizing this is not an optimization."""
+    small = extract.context_for("sys", "a short talk")
+    big = extract.context_for("sys", "x" * 60_000)
+    assert small == extract.MIN_CONTEXT
+    assert big == extract.MAX_CONTEXT
+    assert extract.context_for("x" * 5_000, "x" * 20_000) > small
+
+
+def test_valid_json_in_the_wrong_schema_is_retried_not_believed(tmp_path):
+    """The dangerous failure: JSON that parses, has no `concepts`, and would be written
+    as a candidate recording that the talk contained no ideas at all."""
+    cfg = scaffold(tmp_path)
+    src = cfg.sources / "demo" / "example-talk.md"
+    meta, body = store.read_md(src)
+    meta["summary_status"] = "pending"
+    store.write_md(src, body, meta)
+
+    class OwnSchema(extract.Backend):
+        name = "own-schema"
+
+        def __init__(self):
+            self.calls = 0
+
+        def complete(self, system, user):
+            self.calls += 1
+            return json.dumps({"title": "A talk", "summary": "It was about agents"})
+
+    backend = OwnSchema()
+    result = extract.run(cfg, backend, limit=5)
+
+    assert result["written"] == 0, "a made-up schema must not be recorded as a result"
+    assert backend.calls == extract.MAX_ATTEMPTS, "should retry, not accept"
+    assert not (cfg.candidates / "example-talk.json").exists()
+    assert "concepts" in result["failed"][0]["error"]
 
 
 def test_a_model_that_only_paraphrases_writes_nothing_useful(tmp_path):

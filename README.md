@@ -221,13 +221,28 @@ ugraph extract --backend ollama --limit 10     # or: --backend api
 
 This runs **Phase A only** — one transcript at a time, out to candidate JSON.
 
-**Why a 7B model is safe here.** Every quote a model returns is checked against the
-transcript before anything is written: a quote that is not a literal substring is
-rejected, and so is a timestamp the transcript does not contain. A model that paraphrases
-gets caught by a substring test rather than trusted. Rejected concepts are dropped and the
-transcript is retried; a model that fails three times is the wrong model. Measured on this
-machine: `qwen2.5-coder:7b` extracted 5 concepts from one 45-minute talk in about 7
-minutes, all verbatim, none rejected.
+**Why a 7B model is safe here.** Every quote is checked against the transcript before
+anything is written. A quote that is not a literal substring is rejected outright; a
+timestamp is not trusted at all but recomputed from the paragraph the quote actually sits
+in. A model that paraphrases gets caught by a substring test rather than believed, the
+transcript is retried, and a model that fails three times is the wrong model.
+
+**What a local model is actually like.** Set expectations low and the gate does the rest.
+On an 8 GB M-series Mac, `qwen2.5-coder:7b` over two ~12-minute talks produced 12 candidate
+concepts across runs and **the gate threw away 8–9 of them** as non-verbatim. The 3–4 that
+survive are genuinely quoted, correctly timestamped, and pass `ugraph verify` unedited.
+Budget roughly 5–10 minutes per talk.
+
+That two-thirds rejection rate is the system working, not failing — but it means local
+extraction is a way to make progress on a backlog cheaply, not a way to get the same
+result as a strong model for free. It finds fewer concepts and needs more passes.
+
+> **If you are on Ollama, know this:** it silently caps every request at a 4096-token
+> context no matter what the model supports, truncating the prompt from the front rather
+> than erroring. That drops the schema first, and the model then answers in a format it
+> invented — which parses cleanly and contains nothing. `ugraph` sizes `num_ctx` to the
+> prompt and constrains the output schema to avoid this. If you drive Ollama yourself,
+> set `num_ctx` explicitly.
 
 **Why Phase B is not offered locally.** Deciding that ten candidates are one concept needs
 every candidate in view at once, and there is no mechanical check for getting it wrong.

@@ -39,7 +39,7 @@ import os
 import re
 import urllib.error
 import urllib.request
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -56,6 +56,55 @@ OLLAMA_URL = os.environ.get("OLLAMA_HOST", "http://localhost:11434")
 MAX_ATTEMPTS = 3
 
 ProgressFn = Callable[[int, int, str, str], None]
+
+#: Rough chars-per-token for English prose. Only used to size the context window, where
+#: being wrong by 20% costs a little memory and being wrong the other way costs the
+#: entire run — so it deliberately over-estimates.
+CHARS_PER_TOKEN = 3.0
+
+#: Smallest context worth requesting, and the ceiling we will ask a local model for.
+#: Above ~32k most consumer machines start swapping, which is slower than failing.
+MIN_CONTEXT = 8192
+MAX_CONTEXT = 32768
+
+#: The shape Phase A must return, handed to the backend as a constraint rather than a
+#: request. `verbatim_quote` and `timestamp` are what the gate checks; without them a
+#: concept cannot be verified and is not worth keeping.
+CANDIDATE_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "yield": {"type": "string", "enum": ["high", "medium", "low", "none"]},
+        "concepts": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string"},
+                    "claim": {"type": "string"},
+                    "verbatim_quote": {"type": "string"},
+                    "timestamp": {"type": "string"},
+                    "domain": {"type": "string"},
+                },
+                "required": ["name", "claim", "verbatim_quote", "timestamp"],
+            },
+        },
+    },
+    "required": ["yield", "concepts"],
+}
+
+
+def context_for(system: str, user: str) -> int:
+    """A context window big enough for this prompt plus room to answer.
+
+    Ollama silently truncates rather than erroring, so guessing low does not fail
+    loudly — it produces confident nonsense. Round up generously.
+    """
+    prompt = (len(system) + len(user)) / CHARS_PER_TOKEN
+    needed = int(prompt + 2048)  # headroom for the JSON coming back
+    size = MIN_CONTEXT
+    while size < needed and size < MAX_CONTEXT:
+        size *= 2
+    return min(size, MAX_CONTEXT)
 
 
 class BackendError(RuntimeError):
@@ -124,15 +173,28 @@ class OllamaBackend(Backend):
             "prompt": user,
             "system": system,
             "stream": False,
-            # Deterministic-ish: this is extraction, not writing. Creativity here
-            # means paraphrase, which the verbatim gate then rejects.
-            "options": {"temperature": 0.1},
+            # Force the shape rather than asking for it. Without this a 7B model
+            # returns beautifully-formed JSON in a schema it made up, which parses
+            # and then contains nothing the gate can check.
+            "format": CANDIDATE_SCHEMA,
+            "options": {
+                # Deterministic-ish: this is extraction, not writing. Creativity
+                # here means paraphrase, which the verbatim gate then rejects.
+                "temperature": 0.1,
+                # THE bug that made local extraction look broken. Ollama defaults
+                # to a 4096-token context regardless of what the model supports.
+                # A 12-minute talk overflows it, the prompt is truncated from the
+                # front, the schema instructions are the first thing lost — and the
+                # model, now with no spec, confidently invents its own format.
+                # Silent, and it looks like the model is simply too weak.
+                "num_ctx": context_for(system, user),
+            },
         }).encode()
         req = urllib.request.Request(
             f"{self.url}/api/generate", data=payload,
             headers={"Content-Type": "application/json"},
         )
-        with urllib.request.urlopen(req, timeout=600) as resp:
+        with urllib.request.urlopen(req, timeout=900) as resp:
             return json.loads(resp.read()).get("response", "")
 
 
@@ -207,32 +269,62 @@ def _norm(text: str) -> str:
     return _WS.sub(" ", str(text)).strip()
 
 
+def paragraphs(transcript: str) -> list[tuple[str, str]]:
+    """[(marker, normalized text)] for each `[HH:MM:SS]` paragraph, in order."""
+    parts = _TIMESTAMP.split(transcript)
+    # split() yields [preamble, stamp, text, stamp, text, ...]
+    return [(parts[i], _norm(parts[i + 1])) for i in range(1, len(parts) - 1, 2)]
+
+
+def locate(quote: str, paras: Sequence[tuple[str, str]]) -> str | None:
+    """The marker of the paragraph containing this quote, or None if it is in none.
+
+    Checked against the paragraph the quote actually sits in rather than the whole
+    transcript, because that is what `ugraph verify` enforces later. A gate that is
+    weaker than the verifier writes files the verifier then rejects.
+    """
+    for marker, text in paras:
+        if quote in text:
+            return marker
+    return None
+
+
 def gate(candidate: dict, transcript: str) -> tuple[list[dict], list[str]]:
-    """Keep only concepts whose quote and timestamp survive checking.
+    """Keep only concepts whose quote survives checking, and fix their timestamps.
 
     This is what makes a small local model usable. A model that paraphrases produces a
-    quote that is not a substring; a model that guesses a time produces a marker that
-    does not exist. Both are caught here rather than discovered months later in a page
-    that cites something nobody said.
+    quote that is not a substring, and that is caught here rather than discovered
+    months later in a page that cites something nobody said.
+
+    Timestamps are **corrected, not judged**. If the quote is verbatim we know exactly
+    which paragraph it came from, so a model that names the neighbouring marker — the
+    actual observed failure, consistently off by one paragraph — has produced a good
+    concept with a recoverable field, not a bad concept. Deriving the answer we can
+    compute beats rejecting work over it.
     """
+    paras = paragraphs(transcript)
     body = _norm(transcript)
-    stamps = set(_TIMESTAMP.findall(transcript))
 
     kept, rejected = [], []
     for concept in candidate.get("concepts") or []:
         name = str(concept.get("name", "?"))
         quote = _norm(concept.get("verbatim_quote", ""))
-        stamp = str(concept.get("timestamp", "")).strip()
 
         if not quote:
             rejected.append(f"{name}: no quote")
             continue
-        if quote not in body:
-            rejected.append(f"{name}: quote is not verbatim")
+
+        marker = locate(quote, paras)
+        if marker is None:
+            # Present in the transcript but spanning a paragraph boundary is still a
+            # real quote; only text that appears nowhere is a fabrication.
+            if quote not in body:
+                rejected.append(f"{name}: quote is not verbatim")
+                continue
+            rejected.append(f"{name}: quote straddles two paragraphs, cannot cite one")
             continue
-        if stamp and stamp not in stamps:
-            rejected.append(f"{name}: timestamp {stamp} is not in the transcript")
-            continue
+
+        concept["timestamp"] = marker
         kept.append(concept)
 
     return kept, rejected
@@ -320,6 +412,15 @@ def extract_one(config: Config, page: Page, backend: Backend,
         candidate = parse_json(raw)
         if candidate is None:
             result.error = "response was not JSON"
+            continue
+
+        # Well-formed JSON in the wrong shape is the failure that hurts, because it
+        # looks like success: no `concepts` key means gate() sees nothing, keeps
+        # nothing, rejects nothing, and writes a candidate file recording that this
+        # talk contained no ideas. Retry instead of believing it.
+        if not isinstance(candidate.get("concepts"), list):
+            result.error = ("response had no 'concepts' list — the model answered in "
+                            "its own schema")
             continue
 
         kept, rejected = gate(candidate, transcript)
