@@ -94,3 +94,9 @@ ignore = [
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# Several test modules share `scaffold` via `from tests.test_roundtrip import ...`.
+# That resolves under `python -m pytest`, which puts the working directory on
+# sys.path, and fails under the `pytest` console script, which does not — so the
+# suite passed locally and could not even be collected in CI. Set it explicitly
+# rather than depending on how pytest happens to be invoked.
+pythonpath = ["."]
