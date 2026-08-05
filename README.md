@@ -29,6 +29,61 @@ entire value, and it is also the hard part — see [Architecture](#architecture)
 
 ---
 
+## The structure
+
+Seven directories. That is the whole format, and it is deliberately something you could
+have created by hand:
+
+```
+knowledge/
+├── index.md          the entry point — an agent starts here and follows links
+├── concepts/         ideas, synthesized across every source that taught them
+├── entities/         the people, companies and tools those ideas belong to
+├── sources/          one page per talk: what it covered, what it contributed
+├── raw/              transcripts. Immutable. Never edited, never hand-written
+├── _mocs/            hand-curated maps of content, when you want a reading order
+├── SCHEMA.md         the rules, in the repo, readable by you and by an agent
+└── taxonomy.json     your closed vocabulary — domains, source types, subtypes
+```
+
+A page is markdown with frontmatter and typed relationship headings:
+
+```markdown
+---
+type: concept
+domain: ai_engineering
+confidence: high
+---
+
+# LLM as a judge
+
+Use a model to grade output that code cannot check. Lyft's deterministic criteria
+"usually looks like a code assertion, as you see in traditional unit test"
+([Build Evals That Actually Matter](../sources/ai-engineer/build-evals.md) @ 00:10:24).
+
+## Prerequisites
+- [error analysis loop](error-analysis-loop.md)
+
+## Contrasts with
+- [offline and online evals](offline-and-online-evals.md)
+
+## Sources
+- [Build Evals That Actually Matter](../sources/ai-engineer/build-evals.md)
+```
+
+Those headings are the graph. `## Prerequisites` is a labelled edge, `ugraph lint`
+enforces that it points somewhere real and that the other page points back, and
+`ugraph graph` exports the whole thing to Canvas, GraphML, DOT, d3 or JSON without any
+of it ever having lived in a database.
+
+**Why this and not a vector store.** You can read it. You can `git diff` it. You can
+grep it, edit a page by hand at 2am, and nothing needs re-indexing. When an agent cites
+something you can click the citation and land on the sentence. A ~230-page base exports
+to about 64 KB of JSON — small enough to hand a model the entire graph instead of
+teaching it a query language.
+
+---
+
 ## Install
 
 ```bash
@@ -182,6 +237,32 @@ do it.
 
 ---
 
+## Does the check actually catch anything?
+
+Yes, and the most useful evidence is that it caught things in *my own* knowledge base —
+the one I built by hand and had read several times.
+
+Running `ugraph verify` over 385 pages found 11 defects. Ten were the small ways a quote
+quietly stops being a quote: an editor writing `because` where the speaker said `cuz`,
+`self-harm` where the captions read `self harm`, `[OpenTelemetry]` expanded in place over
+a garbled acronym, two fragments stitched across an elision, a period the speaker never
+paused for.
+
+The eleventh was a sentence nobody said. A concept page attributed *"if this interaction
+should grant a concession, did it?"* to a Lyft talk. The word "concession" is in that
+transcript. That sentence is not — it was a cleaned-up paraphrase wearing quotation marks.
+
+Every one of those was invisible to reading, and each one had been read. Tidying a
+machine transcript is a reasonable thing for an editor to do, and it is still how a
+speaker ends up on record saying something they did not say. That is the whole argument
+for a mechanical check: not that you are careless, but that this particular error is
+undetectable by care.
+
+(One of the 11 turned out to be the checker's fault — it blamed a citation for the quote
+next door. That got fixed too. A gate people learn to argue with is a gate they ignore.)
+
+---
+
 ## Commands
 
 | | |
@@ -291,11 +372,19 @@ drives how indexes group. Edit it, run `ugraph index`, done.
 
 ## Status
 
-**Alpha.** Built and exercised on a single channel: ~150 talks, 57 concepts, 385 pages,
-lint clean. It has not been run against a second channel, and the demo-to-product gap is
-real — expect the first unfamiliar corpus to find something.
+**Alpha.** Built and exercised on ~150 talks: 57 concepts, 385 pages, `lint` clean and
+`verify` clean. The demo-to-product gap is real — expect the first unfamiliar corpus to
+find something.
 
 Known limits, all measured rather than guessed:
+
+- **Nobody has benchmarked whether it answers questions better than a bare model.** The
+  format is designed for agent traversal and the citations are real, but "an agent
+  navigates this well" is currently a design intention, not a published finding. If that
+  matters to you, treat it as unproven.
+- YouTube is the only source adapter so far. The contract is small — write `raw/` +
+  `sources/` and you inherit `lint`, `verify`, `ledger` and `graph` — and RSS is the
+  most wanted next one.
 
 - `concepts/index.md` grows linearly with concept count (~9 KB at 57). On small-context
   models this becomes the bottleneck before your content does. Per-domain index splitting
