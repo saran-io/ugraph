@@ -220,23 +220,45 @@ def cmd_ingest(args) -> int:
         result = youtube.ingest(
             cfg, args.url,
             limit=args.limit, slug=args.slug, dry_run=args.dry_run,
-            sleep=args.sleep, force=args.force, progress=progress,
+            sleep=args.sleep, force=args.force, newest=args.newest,
+            retry_failed=args.retry_failed, progress=progress,
         )
     except FileNotFoundError as exc:
         sys.exit(f"ugraph: {exc}")
     except RuntimeError as exc:
         sys.exit(f"ugraph: {exc}")
 
+    # Recovering IDs from disk means the state file was missing or incomplete. Silent
+    # self-healing is the wrong kind of quiet: the user should know their state was
+    # rebuilt, because it is also the signal that something deleted or moved it.
+    recovered = result.get("recovered_from_disk", 0)
+    if recovered:
+        print(f"  [state] recovered {recovered} previously-ingested video(s) "
+              "from transcripts on disk")
+
     if args.dry_run:
         for v in result.get("videos", []):
             print(f"  {v['id']}  {v.get('title', '')[:70]}")
         print(f"\n{len(result.get('videos', []))} video(s) would be ingested.")
+        if result.get("known_failed"):
+            print(f"  ({result['known_failed']} previously failed, excluded — "
+                  "use --retry-failed to reconsider)")
         return 0
 
     for warning in result.get("warnings", []):
         print(f"  [warn] {warning}")
-    print(f"\nIngested {result['written']}, skipped {result['skipped']}. "
-          f"{result['total_ingested']}/{result['listed']} of the listing now in the KB.")
+    print(f"\nIngested {result['written']}, skipped {result['skipped']}.")
+    # With --newest the listing is a window over the channel, not the channel, so
+    # "151/10 of the listing" is not a ratio — it is two unrelated numbers.
+    if args.newest:
+        print(f"  {result['total_ingested']} video(s) held from this channel; "
+              f"looked at the {result['listed']} most recent.")
+    else:
+        print(f"  {result['total_ingested']}/{result['listed']} "
+              "of the listing now in the KB.")
+    if result.get("failed"):
+        print(f"  {result['failed']} video(s) recorded as unfetchable (no captions); "
+              "they will not be retried. --retry-failed reconsiders them.")
     print("Next: ugraph index && ugraph lint")
     return 0
 
@@ -328,7 +350,7 @@ def cmd_verify(args) -> int:
 def cmd_status(args) -> int:
     from ugraph import status as status_mod
     cfg = _config(args)
-    stats = status_mod.collect(cfg)
+    stats = status_mod.collect(cfg, **selectors(args))
     if args.json:
         print(json.dumps(stats, indent=2, default=str))
         return 0
@@ -391,10 +413,17 @@ def cmd_ledger(args) -> int:
             print(f"  {e['ts']}  {e['stage']:<13} {e.get('by', ''):<22}{detail}")
         return 0
 
+    from ugraph import select
+
     items = ledger_mod.collect(cfg)
+    sel = selectors(args)
+    if any(v is not None for v in sel.values()):
+        items = select.by_recency(items, **sel)
     if args.pending:
         items = [i for i in items if not i.done]
     if args.stuck is not None:
+        # --stuck re-sorts by how long something has sat, which is the point of it.
+        # That deliberately overrides publication order when both are given.
         items = [i for i in items if i.stuck and (i.age_days or 0) >= args.stuck]
         items.sort(key=lambda i: -(i.age_days or 0))
 
@@ -421,16 +450,38 @@ def cmd_ledger(args) -> int:
 
 def cmd_extract(args) -> int:
     from ugraph import extract as extract_mod
+    from ugraph import select
     cfg = _config(args)
 
     settings = cfg.raw.get("extract", {}) or {}
     backend_name = args.backend or settings.get("backend") or "claude-code"
     model = args.model or settings.get("model")
+    sel = selectors(args)
+
+    # `--dry-run` exists because selection used to be invisible: `--limit 10` silently
+    # meant "ten talks whose slug starts with a". Being able to see the batch, in
+    # order, before spending an hour of local inference is worth one flag.
+    if args.dry_run:
+        batch = extract_mod.pending_sources(cfg, **sel)[:args.limit]
+        if args.json:
+            print(json.dumps([{
+                "slug": str(p.meta.get("slug") or p.id),
+                "published": p.meta.get("published"),
+                "title": p.title,
+            } for p in batch], indent=2))
+            return 0
+        phrase = select.describe(**sel)
+        print(f"{len(batch)} source(s) would be extracted"
+              + (f" ({phrase})" if phrase else "") + ":")
+        for page in batch:
+            date_str = str(page.meta.get("published") or "undated")
+            print(f"  {date_str:<12} {page.title[:58]}")
+        return 0
 
     # claude-code is not something this process can drive — the agent does the work.
     # Say so plainly rather than pretending to dispatch it.
     if backend_name == "claude-code":
-        pending = extract_mod.pending_sources(cfg)
+        pending = extract_mod.pending_sources(cfg, **sel)
         print(f"{len(pending)} source(s) waiting to be extracted.")
         print()
         print("The claude-code backend runs in your agent, not here:")
@@ -450,7 +501,7 @@ def cmd_extract(args) -> int:
     def progress(i, total, slug, title):
         print(f"[{i}/{total}] {title[:62]}")
 
-    result = extract_mod.run(cfg, backend, limit=args.limit, progress=progress)
+    result = extract_mod.run(cfg, backend, limit=args.limit, progress=progress, **sel)
 
     if args.json:
         payload = {k: v for k, v in result.items() if k != "results"}
@@ -503,6 +554,35 @@ def cmd_skills(args) -> int:
 # parser
 # ---------------------------------------------------------------------------
 
+def add_selectors(sp, since: bool = True, channel: bool = True) -> None:
+    """The recency flags, added from one place so they cannot drift apart.
+
+    `--newest` meaning "most recently published" in `extract` and something subtly
+    different in `ledger` would be worse than not offering it at all.
+    """
+    sp.add_argument("--newest", type=int, metavar="N",
+                    help="the N most recently published")
+    if since:
+        sp.add_argument("--since", metavar="DATE",
+                        help="published on or after DATE (YYYY-MM-DD, or 7d/2w/3m/1y)")
+    if channel:
+        sp.add_argument("--channel", metavar="SLUG",
+                        help="restrict to one channel, e.g. ai-engineer")
+
+
+def selectors(args) -> dict:
+    """Resolve the selector flags into kwargs, exiting cleanly on a bad date."""
+    from ugraph import select
+
+    raw = getattr(args, "since", None)
+    try:
+        since = select.parse_since(raw) if raw else None
+    except ValueError as exc:
+        sys.exit(f"ugraph: {exc}")
+    return {"newest": getattr(args, "newest", None), "since": since,
+            "channel": getattr(args, "channel", None)}
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="ugraph",
@@ -523,11 +603,18 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("source", choices=["youtube"])
     sp.add_argument("url")
     sp.add_argument("--limit", type=int, default=10, help="max NEW items this run")
+    # No --since here: yt-dlp's flat playlist listing returns NA for upload_date, so a
+    # date filter would need a per-video metadata fetch — most of the cost of ingesting
+    # anyway. Listing order is the only cheap recency signal, hence --newest.
+    sp.add_argument("--newest", type=int, metavar="N",
+                    help="only consider the N most recent uploads, held or not")
     sp.add_argument("--slug", help="override the channel slug")
     sp.add_argument("--dry-run", action="store_true")
     sp.add_argument("--sleep", type=float, default=1.5,
                     help="seconds between fetches; raise it if you hit rate limits")
     sp.add_argument("--force", action="store_true", help="re-fetch items already recorded")
+    sp.add_argument("--retry-failed", action="store_true",
+                    help="reconsider videos recorded as unfetchable")
     sp.set_defaults(func=cmd_ingest)
 
     sp = sub.add_parser("index", help="regenerate every index.md")
@@ -551,6 +638,7 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--clusters", action="store_true")
     sp.add_argument("--pending", action="store_true")
     sp.add_argument("--thin", action="store_true", help="single-source concepts")
+    add_selectors(sp)
     sp.add_argument("--json", action="store_true")
     sp.set_defaults(func=cmd_status)
 
@@ -580,6 +668,7 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--stuck", type=int, metavar="DAYS", nargs="?", const=0,
                     help="pulled but unprocessed for DAYS+ days")
     sp.add_argument("--limit", type=int, default=40)
+    add_selectors(sp)
     sp.add_argument("--write", action="store_true",
                     help="write a markdown report into the logs directory")
     sp.add_argument("--json", action="store_true")
@@ -590,6 +679,9 @@ def build_parser() -> argparse.ArgumentParser:
                     help="default: [extract].backend in ugraph.toml, else claude-code")
     sp.add_argument("--model", help="override the backend's model")
     sp.add_argument("--limit", type=int, default=10, help="max sources this run")
+    add_selectors(sp)
+    sp.add_argument("--dry-run", action="store_true",
+                    help="list what would be extracted, in order, and stop")
     sp.add_argument("--json", action="store_true")
     sp.set_defaults(func=cmd_extract)
 

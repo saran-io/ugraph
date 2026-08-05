@@ -285,6 +285,39 @@ next door. That got fixed too. A gate people learn to argue with is a gate they 
 | `ugraph init [PATH]` | Scaffold a KB. Interactive with no arguments |
 | `ugraph ingest youtube URL` | Fetch transcripts. Incremental and resumable |
 | `ugraph extract` | Phase A via a local or API model, behind the verbatim gate |
+
+### Choosing what to work on
+
+`extract`, `ledger` and `status` take the same three selectors, and everything is
+ordered **most recently published first**:
+
+```bash
+ugraph extract --newest 10           # the 10 most recent talks
+ugraph extract --since 2w            # published in the last fortnight
+ugraph extract --channel ai-engineer --newest 5
+ugraph extract --newest 20 --limit 5 # of the 20 most recent, do 5
+ugraph extract --newest 10 --dry-run # see the batch before spending an hour on it
+```
+
+`--since` takes `YYYY-MM-DD` or a window (`7d`, `2w`, `3m`, `1y`). `--limit` bounds the
+*work*; the selectors bound the *window*, and `--limit` applies last.
+
+Sources with no publication date sort **last** and are excluded by `--since`. A page
+that cannot prove it falls inside a window is not in that window — otherwise undated
+pages sort to the top and get returned as "the newest", which is exactly the bug that
+made this worth writing down.
+
+**On the ingest side, `--newest` and `--limit` mean different things:**
+
+```bash
+ugraph ingest youtube URL --newest 10   # make sure the 10 most recent are held
+ugraph ingest youtube URL --limit 10    # fetch 10 I don't have yet (backfill)
+```
+
+`--newest` is idempotent: run it twice and the second run fetches nothing. There is no
+`--since` for ingest — YouTube's playlist listing returns no upload dates, so a date
+filter would need a full metadata fetch per video, which is most of the cost of
+ingesting anyway.
 | `ugraph index` | Regenerate every `index.md`. Deterministic; `--check` for CI |
 | `ugraph lint` | Conformance gate. Links, frontmatter, reciprocity, orphans |
 | `ugraph verify` | **Every quote verbatim? Every timestamp real?** |
@@ -311,6 +344,15 @@ checked).
 be a second source of truth and would drift the first time a page was edited by hand.
 Transitions are logged separately, because derivation can tell you *where* something is
 but not *when* it got there.
+
+The one exception is which videos have been *seen*, which no file can tell you — a video
+whose captions were unavailable leaves nothing behind. That lives in
+`.ugraph/state/youtube.json`, and it is a **cache, not the authority**: every run
+reconciles it against the `youtube_id` in each transcript, so a deleted, moved or
+orphaned state file heals itself instead of triggering a full re-download. Videos that
+can never be fetched are recorded with a reason and a count, so they stop consuming a
+slot in every future batch — without that, a channel whose newest videos lack captions
+makes `--limit 25` retry the same 25 forever.
 
 This needs no per-source-type code. Every adapter writes the same `raw/` + `sources/`
 pair, so a blog or newsletter adapter appears in the ledger the day it lands.

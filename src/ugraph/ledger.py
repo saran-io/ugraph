@@ -63,6 +63,7 @@ class Item:
     title: str = ""
     channel: str = ""
     kind: str = ""           # source_type: video, article, thread, talk…
+    published: str = ""      # publication date of the source itself, for --newest/--since
     stage: str = "discovered"
     pulled: bool = False
     extracted: bool = False
@@ -179,6 +180,7 @@ def collect(config: Config) -> list[Item]:
             title=page.title,
             channel=str(page.meta.get("channel") or ""),
             kind=str(page.meta.get("source_type") or ""),
+            published=str(page.meta.get("published") or ""),
         )
 
         raw_ref = page.meta.get("raw")

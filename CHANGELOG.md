@@ -1,5 +1,36 @@
 # Changelog
 
+## Unreleased
+
+### Recency selectors
+
+`extract`, `ledger` and `status` take `--newest N`, `--since DATE` and `--channel SLUG`.
+`--since` accepts `YYYY-MM-DD` or a window (`7d`, `2w`, `3m`, `1y`). `ingest` takes
+`--newest N`; it has no `--since`, because YouTube's playlist listing carries no upload
+dates and fetching them costs a full metadata request per video.
+
+**Behaviour change:** `extract` now processes sources **newest-published first**. It
+previously followed filesystem order, so `--limit 10` meant "ten talks whose slug happens
+to start with `a`" — arbitrary, and invisible unless you checked. Pass `--dry-run` to see
+the batch before committing to it.
+
+Undated sources sort last and are excluded by `--since`. Sorting them naively put them
+*first*, so `--newest 3` would return pages whose date nobody knows and call them the
+most recent.
+
+### Resume actually resumes
+
+- Ingest state is reconciled against `youtube_id` in every transcript on each run, so a
+  lost, moved or orphaned state file no longer means re-downloading the whole channel.
+  Union in both directions: disk recovers a lost file, and state remembers a video whose
+  transcript was deliberately deleted.
+- Videos that cannot be fetched are recorded with a reason, timestamp and attempt count,
+  and excluded from later runs. Previously they were never marked as tried, so they sat
+  at the head of the queue permanently — a channel whose newest 25 videos lacked captions
+  would retry those same 25 on every run and never advance. `--retry-failed` reconsiders
+  them without erasing the history.
+- `ugraph ingest --newest N` is idempotent: "make sure the newest N are held".
+
 ## 0.1.0 — unreleased
 
 First public version. Everything below is new, so this entry describes the shape of the

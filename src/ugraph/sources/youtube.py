@@ -29,7 +29,8 @@ import shutil
 import subprocess
 import tempfile
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
+from datetime import datetime, timezone
 from pathlib import Path
 
 from ugraph.config import Config
@@ -338,6 +339,54 @@ def iso_from_upload(upload_date: str) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Resume
+# ---------------------------------------------------------------------------
+
+
+def ids_on_disk(config: Config) -> set[str]:
+    """Every `youtube_id` recorded in a transcript under `raw/`.
+
+    The state file is a cache of this, not the authority. It was treated as the
+    authority once, and when the file was left behind by a rename the tool cheerfully
+    offered to re-download 151 videos it already had — none of the evidence on disk
+    was consulted.
+
+    Reading frontmatter for a few hundred files costs milliseconds; a wrong answer
+    costs a full re-ingest.
+    """
+    found: set[str] = set()
+    raw_dir = Path(config.raw_dir)
+    if not raw_dir.is_dir():
+        return found
+    for path in raw_dir.rglob("*.md"):
+        try:
+            meta, _ = read_md(path)
+        except Exception as exc:
+            # A damaged transcript is the linter's problem, not resume's — but say so,
+            # because "resume thinks I have fewer videos than I do" is otherwise a
+            # mystery with no trace.
+            _log(config, f"  cannot read {path.name} while reconciling state: {exc}")
+            continue
+        vid = str(meta.get("youtube_id") or "").strip()
+        if vid:
+            found.add(vid)
+    return found
+
+
+def reconcile(config: Config, recorded: Iterable[str]) -> set[str]:
+    """Union of what state remembers and what is actually on disk.
+
+    Union rather than replace, in both directions:
+
+    - disk-only IDs recover a lost or orphaned state file;
+    - state-only IDs are kept because a transcript may have been deliberately
+      removed. This KB has exactly one — a talk ingested twice under two titles,
+      where deleting the duplicate must not invite it back on the next run.
+    """
+    return set(recorded) | ids_on_disk(config)
+
+
+# ---------------------------------------------------------------------------
 # Driver
 # ---------------------------------------------------------------------------
 
@@ -349,6 +398,8 @@ def ingest(config: Config,
            dry_run: bool = False,
            sleep: float = DEFAULT_SLEEP,
            force: bool = False,
+           newest: int | None = None,
+           retry_failed: bool = False,
            progress: ProgressFn | None = None) -> dict:
     """Ingest up to `limit` not-yet-seen videos from `channel_url`.
 
@@ -360,13 +411,17 @@ def ingest(config: Config,
         dry_run:     resolve what would be fetched and return without fetching.
         sleep:       seconds to wait between videos.
         force:       re-ingest videos already recorded in state.
+        newest:      consider only the N most recently published, whether or not they
+                     are already held. `limit` still bounds how much work is done, so
+                     `newest=10, limit=3` means "of the 10 newest, fetch up to 3".
+        retry_failed: reconsider videos previously recorded as permanently failed.
         progress:    optional callable (index, total, video_id, title), called once
                      per video before it is fetched. This module never prints
                      progress itself — that is the caller's job.
 
     Returns a summary dict:
         {channel, slug, listed, already_ingested, pending, videos,
-         written, skipped, total_ingested, warnings, dry_run}
+         written, skipped, failed, total_ingested, warnings, dry_run}
     """
     _require_yt_dlp()
 
@@ -374,14 +429,35 @@ def ingest(config: Config,
     channels: dict = state.setdefault("channels", {})
 
     _log(config, f"Listing videos for {channel_url}")
-    # Over-fetch the listing so `limit` counts *new* videos, not listed ones.
-    listing = list_channel_videos(channel_url,
-                                  limit=None if force else max(limit * 5, 50))
+    # `--newest N` is a window over the listing, so fetch exactly that many. Otherwise
+    # over-fetch so `limit` counts *new* videos rather than listed ones.
+    if newest is not None:
+        listing = list_channel_videos(channel_url, limit=newest)
+    else:
+        listing = list_channel_videos(channel_url,
+                                      limit=None if force else max(limit * 5, 50))
 
     key = channel_url.rstrip("/")
     record: dict = dict(channels.get(key, {}))
-    seen: set[str] = set(record.get("ingested", []))
-    pending = [v for v in listing if force or v["id"] not in seen]
+
+    # State is a cache of what is on disk, never the authority — see reconcile().
+    seen: set[str] = reconcile(config, record.get("ingested", []))
+    recovered = len(seen) - len(set(record.get("ingested", [])))
+
+    # Videos that can never succeed (no captions at all) are remembered so they stop
+    # consuming a slot in every future batch. Without this a channel whose newest N
+    # videos lack captions makes `--limit N` retry the same N forever and never
+    # advance — a livelock, not a slowdown.
+    #
+    # `--retry-failed` stops them being *excluded*; it does not erase the record.
+    # Wiping the history would reset the attempt counter, so a video that has failed
+    # four times would report its fourth failure as its first — and "no captions,
+    # attempt 4" is precisely the signal that it is never getting them.
+    failed: dict = dict(record.get("failed", {}))
+    excluded: set[str] = set() if retry_failed else set(failed)
+
+    pending = [v for v in listing
+               if force or (v["id"] not in seen and v["id"] not in excluded)]
     batch = pending[:limit]
 
     # Reuse the slug this channel was previously ingested under, so a resumed run
@@ -393,23 +469,20 @@ def ingest(config: Config,
         "slug": slug_for_channel,
         "listed": len(listing),
         "already_ingested": len(seen),
+        "recovered_from_disk": recovered,
+        "known_failed": len(excluded),
         "pending": len(pending),
         "videos": batch,
         "written": 0,
         "skipped": 0,
+        "failed": 0,
         "total_ingested": len(seen),
         "warnings": [],
         "dry_run": dry_run,
     }
 
-    if dry_run or not batch:
-        return result
-
     warnings: list[str] = result["warnings"]
     written = skipped = 0
-
-    state.record_run()
-    state.checkpoint()
 
     def _save() -> None:
         """Persist what has been ingested so far.
@@ -423,11 +496,38 @@ def ingest(config: Config,
         channels[key] = {
             "slug": slug_for_channel,
             "ingested": sorted(seen),
+            "failed": failed,
             "last_run": state.get("last_run"),
             "total_listed": len(listing),
         }
         state.set("channels", channels)
         state.checkpoint()
+
+    def _fail(vid: str, reason: str) -> None:
+        """Remember a video that cannot be ingested, and why.
+
+        Recorded per video rather than counted, so `--retry-failed` can revisit them
+        and a human can see whether "no captions" means "not yet" or "never".
+        """
+        prior = failed.get(vid) or {}
+        failed[vid] = {
+            "reason": reason,
+            "at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+            "attempts": int(prior.get("attempts", 0)) + 1,
+        }
+
+    if dry_run:
+        return result
+
+    # Persist even with nothing to fetch: a run that only reconciled recovered IDs
+    # from disk should not have to rediscover them next time.
+    if not batch:
+        if recovered:
+            _save()
+        return result
+
+    state.record_run()
+    state.checkpoint()
 
     with tempfile.TemporaryDirectory() as tmp:
         workdir = Path(tmp)
@@ -438,6 +538,8 @@ def ingest(config: Config,
 
             meta = fetch_video(config, vid, workdir)
             if meta is None:
+                _fail(vid, "no captions available")
+                _save()
                 skipped += 1
                 continue
 
@@ -449,6 +551,8 @@ def ingest(config: Config,
             paragraphs = cues_to_paragraphs(cues)
             if not paragraphs:
                 _log(config, f"  {vid}: captions parsed to nothing, skipping")
+                _fail(vid, "captions parsed to nothing")
+                _save()
                 skipped += 1
                 continue
 
@@ -460,6 +564,7 @@ def ingest(config: Config,
             write_source_stub(config, slug_for_channel, video_slug, vid, meta, paragraphs)
 
             seen.add(vid)
+            failed.pop(vid, None)   # a retry that worked is no longer a failure
             written += 1
             meta["captions_path"].unlink(missing_ok=True)
 
@@ -492,6 +597,7 @@ def ingest(config: Config,
         "slug": slug_for_channel,
         "written": written,
         "skipped": skipped,
+        "failed": len(failed),
         "total_ingested": len(seen),
     })
     return result

@@ -41,10 +41,11 @@ import urllib.error
 import urllib.request
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
+from datetime import date
 from pathlib import Path
 from typing import Any
 
-from ugraph import ledger, templates
+from ugraph import ledger, select, templates
 from ugraph.config import Config
 from ugraph.model import Page, iter_pages
 from ugraph.store import read_md
@@ -358,8 +359,15 @@ def parse_json(text: str) -> dict | None:
 # ---------------------------------------------------------------------------
 
 
-def pending_sources(config: Config) -> list[Page]:
-    """Sources with a transcript, no candidates yet, and not already synthesized."""
+def pending_sources(config: Config, newest: int | None = None,
+                    since: date | None = None,
+                    channel: str | None = None) -> list[Page]:
+    """Sources with a transcript, no candidates yet, and not already synthesized.
+
+    Ordered newest-published first. `iter_pages` walks the filesystem alphabetically,
+    which meant `extract --limit 10` reliably chose ten talks whose slug began with
+    "a" — a batch selection that had nothing to do with what was worth reading next.
+    """
     out = []
     for page in iter_pages(config, root=config.sources, strict=False):
         if page.type != "source":
@@ -372,7 +380,7 @@ def pending_sources(config: Config) -> list[Page]:
         raw_ref = page.meta.get("raw")
         if raw_ref and (page.path.parent / str(raw_ref)).resolve().is_file():
             out.append(page)
-    return out
+    return select.by_recency(out, newest=newest, since=since, channel=channel)
 
 
 def spec() -> str:
@@ -456,9 +464,12 @@ def extract_one(config: Config, page: Page, backend: Backend,
 
 
 def run(config: Config, backend: Backend, limit: int = 10,
-        progress: ProgressFn | None = None) -> dict[str, Any]:
+        progress: ProgressFn | None = None, newest: int | None = None,
+        since: date | None = None, channel: str | None = None) -> dict[str, Any]:
     system = spec()
-    batch = pending_sources(config)[:limit]
+    # `limit` bounds the work, the selectors bound the window: `--newest 20 --limit 5`
+    # is "of the 20 most recent, do 5". So selection happens first and limit last.
+    batch = pending_sources(config, newest=newest, since=since, channel=channel)[:limit]
 
     results = []
     for i, page in enumerate(batch, 1):

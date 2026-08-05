@@ -21,9 +21,11 @@ from __future__ import annotations
 import json
 from collections import Counter
 from collections.abc import Iterable
+from datetime import date
 from pathlib import Path
 from typing import Any
 
+from ugraph import select
 from ugraph.config import Config
 from ugraph.model import Page, iter_pages
 
@@ -90,13 +92,23 @@ def _count_transcripts(config: Config) -> int:
     return sum(1 for _ in config.raw_dir.rglob("*.md"))
 
 
-def collect(config: Config) -> dict[str, Any]:
+def collect(config: Config, newest: int | None = None, since: date | None = None,
+            channel: str | None = None) -> dict[str, Any]:
     """Every number the status views need, and no presentation.
 
     Returned keys are stable and JSON-serializable, which is what makes this usable
     from something other than a terminal.
+
+    The selectors scope the **source** progress numbers only — "how far along am I on
+    the last 30 days of this channel". They deliberately do not touch the concept
+    histogram: a concept is synthesized from many sources and has no publication date
+    of its own, so filtering it by one would be inventing an answer. `scope` records
+    what was applied so neither a reader nor a UI has to guess.
     """
     sources = _load_sources(config)
+    if newest is not None or since is not None or channel is not None:
+        sources = select.by_recency(sources, newest=newest, since=since,
+                                    channel=channel)
     candidates, broken = _load_candidates(config)
 
     extracted = [s for s in sources if str(s.meta.get("summary_status", "")) == "done"]
@@ -138,11 +150,17 @@ def collect(config: Config) -> dict[str, Any]:
     ]
     thin.sort(key=lambda r: r["title"])
 
+    # Count candidates belonging to the *selected* sources. Reporting the corpus-wide
+    # total against a scoped denominator gives things like "29/74" where the 29 came
+    # from a different population than the 74 — a ratio made of two unrelated numbers.
+    scoped_candidates = sum(1 for s in sources if s.path.stem in candidates)
+
     return {
+        "scope": select.describe(newest=newest, since=since, channel=channel),
         "sources_total": len(sources),
         "extracted": len(extracted),
         "pending_total": len(pending),
-        "candidates": len(candidates),
+        "candidates": scoped_candidates,
         "broken_candidates": broken,
         "concepts": len(concepts),
         "entities": len(entities),
@@ -184,6 +202,11 @@ def render(
 
     out.append("Knowledge Base Status")
     out.append("=" * 58)
+    # Say which subset the source numbers describe. A filtered "12/30" that looks
+    # exactly like an unfiltered one is how people misread their own progress.
+    if stats.get("scope"):
+        out.append(f"  Sources scoped to: {stats['scope']}")
+        out.append("")
     out.append(f"  Sources extracted   {_bar(stats['extracted'], total)}  "
                f"{stats['extracted']}/{total}")
     out.append(f"  Candidates ready    {_bar(stats['candidates'], total)}  "
