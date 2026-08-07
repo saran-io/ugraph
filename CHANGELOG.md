@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+### Share boundary + `ugraph x`
+
+- New outbound share surface, documented in `docs/adr/0002-share-boundary.md`.
+  Knowledge commands never publish; bare `ugraph` never posts.
+- `ugraph x` posts text to X after preview + confirmation (`--yes` for scripts,
+  `--dry-run` for validation without network).
+- `ugraph x auth set|status` stores OAuth 1.0a user-context credentials under
+  `~/.config/ugraph/share/x.toml` at mode `0600` and refuses world-readable files.
+- Environment overrides: `UGRAPH_X_API_KEY`, `UGRAPH_X_API_SECRET`,
+  `UGRAPH_X_ACCESS_TOKEN`, `UGRAPH_X_ACCESS_TOKEN_SECRET`.
+- Append-only redacted receipts in `~/.config/ugraph/share/receipts.jsonl`.
+
 ### Person capture and one-command install
 
 - `ugraph person URL` resolves the creator behind a YouTube video, channel, or profile,

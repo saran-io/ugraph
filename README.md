@@ -177,6 +177,27 @@ ugraph person "https://www.youtube.com/watch?v=..." --yes
 No model or API key is involved. Identity metadata comes directly from YouTube through
 `yt-dlp`; ugraph does not invent a biography.
 
+### Share to X (outbound only)
+
+Posting is a separate boundary from knowledge capture — see
+[`docs/adr/0002-share-boundary.md`](docs/adr/0002-share-boundary.md). Bare `ugraph`
+never tweets.
+
+```bash
+# one-time: store Read+Write user tokens from the X developer portal (mode 0600)
+ugraph x auth set
+ugraph x auth status
+
+# copy text, then:
+ugraph x                 # preview → confirm → publish
+ugraph x "hello world"   # explicit text
+ugraph x --dry-run "…"   # validate only, no network
+ugraph x --yes "…"       # skip confirm (scripts / CI)
+```
+
+Credentials live in `~/.config/ugraph/share/` — never inside the Obsidian vault.
+Successful posts append a redacted receipt (post id + URL, no secrets).
+
 ### Using it with your notes app
 
 There is nothing to connect. A knowledge base here *is* a directory of markdown files

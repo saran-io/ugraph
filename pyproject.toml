@@ -60,6 +60,7 @@ only-include = [
     "tests",
     "skills",
     "templates",
+    "docs",
     "README.md",
     "LICENSE",
     "CONTRIBUTING.md",

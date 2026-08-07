@@ -138,8 +138,129 @@ def cmd_smart(args) -> int:
         return _add_person_flow(_config(args), url)
     sys.exit(
         "ugraph: bare capture currently supports YouTube URLs\n"
-        "  Try `ugraph --help` for explicit commands."
+        "  Try `ugraph --help` for explicit commands.\n"
+        "  To post on X:  ugraph x"
     )
+
+
+# ---------------------------------------------------------------------------
+# share / x — outbound only (see docs/adr/0002-share-boundary.md)
+# ---------------------------------------------------------------------------
+
+def _share_text(args) -> str:
+    """Resolve post text: positional args, else clipboard, else stdin/prompt."""
+    parts = getattr(args, "text", None) or []
+    if parts:
+        return " ".join(parts).strip()
+    clip = _clipboard_text().strip()
+    if clip:
+        print("(using clipboard)")
+        return clip
+    if not sys.stdin.isatty():
+        return sys.stdin.read().strip()
+    print("Compose post, then Ctrl+D:", file=sys.stderr)
+    return sys.stdin.read().strip()
+
+
+def cmd_x(args) -> int:
+    """Post text to X. Never runs from bare `ugraph`."""
+    from ugraph.share import secrets as share_secrets
+    from ugraph.share import x as x_mod
+    from ugraph.share.draft import ShareDraft, ShareError
+
+    words = list(getattr(args, "words", None) or [])
+    if words and words[0] == "auth":
+        args.auth_action = words[1] if len(words) > 1 else "status"
+        if len(words) > 2:
+            sys.exit("ugraph: usage: ugraph x auth [set|status]")
+        return _cmd_x_auth(args)
+
+    # Remaining words are the post body when provided positionally.
+    args.text = words
+    try:
+        text = _share_text(args)
+        draft = ShareDraft(text=text, destination="x")
+        preview = x_mod.validate_text(draft.text)
+    except ShareError as exc:
+        sys.exit(f"ugraph: {exc}")
+
+    print("Target: X")
+    print(f"Chars:  {len(preview)}/{x_mod.MAX_CHARS}")
+    print("---")
+    print(preview)
+    print("---")
+
+    if getattr(args, "dry_run", False):
+        x_mod.post(draft, dry_run=True)
+        print(f"Dry run OK — would publish ({len(preview)} chars)")
+        return 0
+
+    if not getattr(args, "yes", False):
+        if not sys.stdin.isatty():
+            print("Nothing published: confirmation needs a terminal (or pass --yes).")
+            return 1
+        answer = input("Publish to X now? [y/N] ").strip().lower()
+        if answer not in ("y", "yes"):
+            print("Nothing published.")
+            return 0
+
+    try:
+        # Resolve credentials before the network call so missing secrets fail
+        # closed with a clear setup command rather than a mid-request 401.
+        share_secrets.get_x_credentials()
+        result = x_mod.post(draft, dry_run=False)
+    except ShareError as exc:
+        sys.exit(f"ugraph: {exc}")
+
+    print(f"Published: {result.url}")
+    print(f"  post id: {result.post_id}")
+    return 0
+
+
+def _cmd_x_auth(args) -> int:
+    from ugraph.share import secrets as share_secrets
+    from ugraph.share.draft import ShareError
+
+    sub = getattr(args, "auth_action", "status") or "status"
+    if sub == "status":
+        st = share_secrets.x_status()
+        print("ugraph x auth status")
+        print(f"  configured: {st['configured']}")
+        if st["secrets_file"]:
+            print(f"  secrets:    {st['secrets_file']}  ({st['file_mode']})")
+            if st["file_private"] is False:
+                print("  WARNING: secrets file is not mode 0600 — posting is refused")
+        else:
+            print("  secrets:    (none)")
+        if st["env_vars_set"]:
+            print(f"  env:        {', '.join(st['env_vars_set'])}")
+        print()
+        print("Next:")
+        print("  ugraph x auth set     # store OAuth 1.0a user tokens (0600)")
+        print("  ugraph x \"hello\"      # preview + confirm, then post")
+        return 0
+
+    if sub == "set":
+        import getpass
+
+        print("Paste X developer portal user-context credentials.")
+        print("App must have Read and Write. Values are hidden and stored at mode 0600.")
+        print(f"  → {share_secrets.x_secrets_path()}")
+        try:
+            api_key = getpass.getpass("API key: ")
+            api_secret = getpass.getpass("API secret: ")
+            access_token = getpass.getpass("Access token: ")
+            access_token_secret = getpass.getpass("Access token secret: ")
+            path = share_secrets.set_x_credentials(
+                api_key, api_secret, access_token, access_token_secret,
+            )
+        except (ShareError, EOFError) as exc:
+            sys.exit(f"ugraph: {exc}")
+        print(f"saved X credentials → {path} (permissions 0600)")
+        print("Test with:  ugraph x --dry-run \"ugraph share smoke test\"")
+        return 0
+
+    sys.exit("ugraph: `x auth` expects 'set' or 'status'")
 
 
 # ---------------------------------------------------------------------------
@@ -726,6 +847,20 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--yes", "-y", action="store_true",
                     help="write without interactive confirmation")
     sp.set_defaults(func=cmd_person)
+
+    sp = sub.add_parser(
+        "x",
+        help="post text to X (outbound share — never runs from bare ugraph)",
+    )
+    sp.add_argument(
+        "words", nargs="*",
+        help="post text, or `auth set` / `auth status`",
+    )
+    sp.add_argument("--yes", "-y", action="store_true",
+                    help="publish without interactive confirmation")
+    sp.add_argument("--dry-run", action="store_true",
+                    help="preview and validate only — no network publish")
+    sp.set_defaults(func=cmd_x)
 
     sp = sub.add_parser("index", help="regenerate every index.md")
     sp.add_argument("--check", action="store_true", help="exit 1 if stale; write nothing")
