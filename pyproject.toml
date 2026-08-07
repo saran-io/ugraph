@@ -28,6 +28,9 @@ dependencies = [
     "PyYAML>=6.0",
     # tomllib is stdlib from 3.11; this is the backport for 3.10
     "tomli>=2.0; python_version < '3.11'",
+    # Both transcript ingestion and `ugraph person` use the installed executable.
+    # Core first use must not require a second package-manager command.
+    "yt-dlp>=2025.1.15",
 ]
 
 [project.optional-dependencies]
@@ -37,8 +40,9 @@ dev = ["pytest>=7.0", "ruff>=0.4"]
 api = ["anthropic>=0.40", "openai>=1.40"]
 
 [project.urls]
-Homepage = "https://github.com/saran-io/ugraph-kit"
-Issues = "https://github.com/saran-io/ugraph-kit/issues"
+Homepage = "https://ugraph.build"
+Source = "https://github.com/saran-io/ugraph"
+Issues = "https://github.com/saran-io/ugraph/issues"
 
 [project.scripts]
 ugraph = "ugraph.cli:main"

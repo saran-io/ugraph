@@ -44,6 +44,104 @@ def _bundled(name: str) -> Path:
     sys.exit(f"ugraph: cannot locate bundled {name}/ — is the install complete?")
 
 
+def _clipboard_text() -> str:
+    """Read a desktop clipboard when a supported command is available."""
+    import subprocess
+
+    commands = [
+        ["pbpaste"],
+        ["wl-paste", "--no-newline"],
+        ["xclip", "-selection", "clipboard", "-o"],
+        ["xsel", "--clipboard", "--output"],
+        ["powershell.exe", "-NoProfile", "-Command", "Get-Clipboard"],
+    ]
+    for command in commands:
+        if shutil.which(command[0]) is None:
+            continue
+        try:
+            result = subprocess.run(command, capture_output=True, text=True, timeout=5)
+        except (OSError, subprocess.SubprocessError):
+            continue
+        if result.returncode == 0:
+            return result.stdout
+    return ""
+
+
+def _add_person_flow(cfg, url: str, *, yes: bool = False,
+                     name: str | None = None) -> int:
+    """Resolve, preview, confirm, and write one person reference."""
+    from dataclasses import replace
+
+    from ugraph import person as person_mod
+
+    try:
+        person = person_mod.resolve(url)
+    except person_mod.PersonResolutionError as exc:
+        sys.exit(f"ugraph: {exc}")
+    if name:
+        person = replace(person, name=name.strip())
+
+    print(f"Detected: {person.name}{f' ({person.handle})' if person.handle else ''}")
+    print(f"  profile: {person.profile_url}")
+    print(f"  source:  {person.source_title}")
+
+    if not yes:
+        if not sys.stdin.isatty():
+            print("\nNothing written: confirmation needs a terminal.")
+            print(f"Run: ugraph person {url!r} --yes")
+            return 1
+        answer = input("Add this person to your knowledge base? [Y/n] ").strip().lower()
+        if answer not in ("", "y", "yes"):
+            print("Nothing written.")
+            return 0
+
+    result = person_mod.add(cfg, person)
+    action = "Created" if result.created else "Already exists"
+    print(f"{action}:")
+    print(f"  canonical → {result.canonical_path}")
+    print(f"  redirect  → {result.redirect_path}")
+    return 0
+
+
+def _person_url(url: str | None = None) -> str:
+    if url:
+        return url.strip()
+    clipboard = _clipboard_text().strip()
+    if clipboard:
+        print("(using clipboard)")
+        return clipboard
+    if not sys.stdin.isatty():
+        return sys.stdin.read().strip()
+    return input("Paste a YouTube link: ").strip()
+
+
+def cmd_person(args) -> int:
+    url = _person_url(getattr(args, "url", None))
+    if not url:
+        sys.exit("ugraph: no URL supplied")
+    return _add_person_flow(
+        _config(args),
+        url,
+        yes=getattr(args, "yes", False),
+        name=getattr(args, "name", None),
+    )
+
+
+def cmd_smart(args) -> int:
+    """Bare `ugraph`: route one pasted/copied URL to the smallest useful action."""
+    from ugraph import person as person_mod
+
+    url = _person_url()
+    if not url:
+        sys.exit("ugraph: no input supplied")
+    if person_mod.is_supported_url(url):
+        return _add_person_flow(_config(args), url)
+    sys.exit(
+        "ugraph: bare capture currently supports YouTube URLs\n"
+        "  Try `ugraph --help` for explicit commands."
+    )
+
+
 # ---------------------------------------------------------------------------
 # init
 # ---------------------------------------------------------------------------
@@ -591,7 +689,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--version", action="version", version=f"ugraph-kit {__version__}")
     p.add_argument("--kb", metavar="PATH",
                    help="knowledge base root (default: ugraph.toml, $UGRAPH_KB, or cwd)")
-    sub = p.add_subparsers(dest="command", required=True)
+    p.set_defaults(func=cmd_smart)
+    sub = p.add_subparsers(dest="command")
 
     sp = sub.add_parser("init", help="scaffold a new knowledge base")
     sp.add_argument("path", nargs="?",
@@ -616,6 +715,17 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--retry-failed", action="store_true",
                     help="reconsider videos recorded as unfetchable")
     sp.set_defaults(func=cmd_ingest)
+
+    sp = sub.add_parser(
+        "person",
+        help="resolve a person from a YouTube link and add them to the KB",
+    )
+    sp.add_argument("url", nargs="?",
+                    help="video/channel/profile URL (defaults to clipboard)")
+    sp.add_argument("--name", help="override the resolved display name")
+    sp.add_argument("--yes", "-y", action="store_true",
+                    help="write without interactive confirmation")
+    sp.set_defaults(func=cmd_person)
 
     sp = sub.add_parser("index", help="regenerate every index.md")
     sp.add_argument("--check", action="store_true", help="exit 1 if stale; write nothing")

@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+### Person capture and one-command install
+
+- `ugraph person URL` resolves the creator behind a YouTube video, channel, or profile,
+  previews the identity, and writes only after confirmation. Bare `ugraph` reads a copied
+  URL and runs the same flow; `--yes` makes it scriptable.
+- Person writes are idempotent. The canonical page lives under `entities/people/`;
+  `resources/people/` receives a compatibility redirect, and an existing human-authored
+  canonical page is never overwritten.
+- The exact supplied source URL is preserved, including `?t=` timestamps. Metadata comes
+  from yt-dlp rather than a model, so the command does not invent a biography.
+- `yt-dlp` is now a runtime dependency. A fresh `uv tool install` no longer needs a
+  separate Homebrew/pip step before YouTube commands work.
+- Added the ugraph product mark, `ugraph.build` links, and a first-use person walkthrough.
+
 ### Recency selectors
 
 `extract`, `ledger` and `status` take `--newest N`, `--since DATE` and `--channel SLUG`.

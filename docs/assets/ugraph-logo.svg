@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-labelledby="title desc">
+  <title id="title">ugraph logo</title>
+  <desc id="desc">Three connected nodes forming a lowercase U-shaped knowledge graph.</desc>
+  <path
+    d="M52 68v48c0 55 31 86 76 86s76-31 76-86V68"
+    fill="none"
+    stroke="#4B5563"
+    stroke-width="22"
+    stroke-linecap="round"
+  />
+  <circle cx="52" cy="57" r="29" fill="#4B5563" />
+  <circle cx="204" cy="57" r="29" fill="#22A447" />
+  <circle cx="128" cy="202" r="29" fill="#4B5563" />
+  <circle cx="52" cy="57" r="12" fill="white" />
+  <circle cx="204" cy="57" r="12" fill="white" />
+  <circle cx="128" cy="202" r="12" fill="white" />
+</svg>

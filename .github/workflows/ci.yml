@@ -75,6 +75,8 @@ jobs:
           mkdir -p /tmp/vault2/.obsidian
           /tmp/wheel-venv/bin/ugraph init /tmp/vault2/kb
           /tmp/wheel-venv/bin/ugraph --kb /tmp/vault2/kb lint
+          /tmp/wheel-venv/bin/ugraph person --help
+          /tmp/wheel-venv/bin/yt-dlp --version
 
       # Every command's --json is the contract a future UI will read. Breaking it
       # silently is easy; asserting it is cheap.

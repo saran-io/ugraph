@@ -1,10 +1,38 @@
-# ugraph-kit
+<p align="center">
+  <a href="https://ugraph.build">
+    <img src="https://raw.githubusercontent.com/saran-io/ugraph/main/docs/assets/ugraph-logo.svg"
+         width="132" alt="ugraph logo">
+  </a>
+</p>
 
-Turn a YouTube channel into a knowledge base an AI agent can actually navigate — and cite.
+<h1 align="center">ugraph</h1>
+
+<p align="center">
+  <strong>Build verifiable knowledge from the sources you trust.</strong><br>
+  YouTube sources → plain Markdown → an agent-navigable graph with citations.
+</p>
+
+<p align="center">
+  <a href="https://ugraph.build">Website</a> ·
+  <a href="#install">Install</a> ·
+  <a href="#quickstart">Quickstart</a> ·
+  <a href="#does-the-check-actually-catch-anything">Evidence</a>
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/python-3.10–3.13-3776AB" alt="Python 3.10 to 3.13">
+  <img src="https://img.shields.io/badge/status-alpha-D97706" alt="Alpha status">
+  <a href="https://github.com/saran-io/ugraph/actions/workflows/ci.yml">
+    <img src="https://github.com/saran-io/ugraph/actions/workflows/ci.yml/badge.svg" alt="CI status">
+  </a>
+  <a href="LICENSE">
+    <img src="https://img.shields.io/badge/license-MIT-22A447" alt="MIT license">
+  </a>
+</p>
 
 Plain markdown, YAML frontmatter, relative links. **No database, no embeddings, no vector
-store.** An agent reads `index.md`, follows links to the three pages it needs, and answers
-with a citation that points at a timestamp in an immutable transcript.
+store.** An agent reads `index.md`, follows links to the pages it needs, and answers with
+a citation that points at a timestamp in an immutable transcript.
 
 ```
 concepts/llm-as-a-judge.md
@@ -89,8 +117,10 @@ teaching it a query language.
 ```bash
 uv tool install git+https://github.com/saran-io/ugraph
 # or: pipx install git+https://github.com/saran-io/ugraph
-brew install yt-dlp   # or: uv tool install yt-dlp / pipx install yt-dlp
 ```
+
+That is the whole install. `yt-dlp`, used for deterministic YouTube metadata and
+transcripts, is included as a runtime dependency.
 
 ## Quickstart
 
@@ -115,6 +145,37 @@ ugraph status                                # what is extracted, what is pendin
 
 You now have transcripts and source stubs. To turn them into concepts, see
 [Extraction](#extraction) — that step needs a model, and you choose which one.
+
+### Save a person from any YouTube link
+
+Copy a video, channel, or profile URL and run:
+
+```bash
+ugraph
+```
+
+ugraph resolves the creator, previews exactly what it found, and asks before writing:
+
+```text
+Detected: Kun Chen (@kunchenguid)
+  profile: https://www.youtube.com/channel/...
+  source:  L8 Principal Building a Full Stack App with Agentic Engineering
+Add this person to your knowledge base? [Y/n]
+```
+
+It creates one canonical record under `entities/people/` and a compatibility redirect
+under `resources/people/`. Repeating the command does not duplicate the person or
+overwrite human-written content.
+
+The explicit and automation-friendly forms are:
+
+```bash
+ugraph person "https://www.youtube.com/watch?v=..."
+ugraph person "https://www.youtube.com/watch?v=..." --yes
+```
+
+No model or API key is involved. Identity metadata comes directly from YouTube through
+`yt-dlp`; ugraph does not invent a biography.
 
 ### Using it with your notes app
 
