@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ugraph — build verifiable knowledge from the sources you trust</title>
+<meta name="description" content="ugraph is an open-source CLI that turns YouTube and text sources into a plain-markdown knowledge base and graph for agents — with every quote mechanically verified against the source.">
+<link rel="icon" type="image/svg+xml" href="docs/assets/ugraph-logo.svg">
+<style>
+  :root {
+    --ink: #1F2937;
+    --ink-soft: #4B5563;
+    --ink-faint: #6B7280;
+    --green: #22A447;
+    --green-dark: #17863A;
+    --paper: #ffffff;
+    --bg: #FAFAF9;
+    --line: #E5E7EB;
+    --code-bg: #111827;
+    --code-ink: #E5E7EB;
+    --mono: "SF Mono", "Cascadia Code", "JetBrains Mono", Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    color: var(--ink);
+    background: var(--bg);
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 980px; margin: 0 auto; padding: 0 24px; }
+
+  /* ---------- header ---------- */
+  header {
+    background: var(--paper);
+    border-bottom: 1px solid var(--line);
+    position: sticky; top: 0; z-index: 10;
+  }
+  .nav { display: flex; align-items: center; justify-content: space-between; height: 60px; }
+  .nav-brand { display: flex; align-items: center; gap: 10px; font-weight: 700; color: var(--ink); text-decoration: none; font-size: 17px; }
+  .nav-brand img { width: 26px; height: 26px; }
+  .nav-links { display: flex; gap: 24px; }
+  .nav-links a { color: var(--ink-soft); text-decoration: none; font-size: 14px; font-weight: 500; }
+  .nav-links a:hover { color: var(--ink); }
+  .nav-links .cta {
+    background: var(--green); color: #fff; padding: 7px 16px; border-radius: 8px;
+  }
+  .nav-links .cta:hover { background: var(--green-dark); color: #fff; }
+
+  /* ---------- hero ---------- */
+  .hero { padding: 88px 0 72px; text-align: center; }
+  .hero .logo { width: 96px; height: 96px; margin-bottom: 24px; }
+  .hero h1 { font-size: 44px; line-height: 1.15; letter-spacing: -0.02em; font-weight: 800; }
+  .hero h1 span { color: var(--green); }
+  .hero .tagline {
+    max-width: 640px; margin: 18px auto 0; font-size: 19px; color: var(--ink-soft);
+  }
+  .hero .tagline strong { color: var(--ink); }
+  .hero .install {
+    margin-top: 40px; display: flex; flex-direction: column; align-items: center; gap: 12px;
+  }
+  .hero .primary {
+    background: var(--green); color: #fff; text-decoration: none; font-weight: 600;
+    padding: 13px 26px; border-radius: 10px; font-size: 16px; display: inline-block;
+  }
+  .hero .primary:hover { background: var(--green-dark); }
+  .hero .alt { color: var(--ink-faint); font-size: 14px; }
+  .hero .alt code {
+    font-family: var(--mono); font-size: 13px; background: var(--paper);
+    border: 1px solid var(--line); padding: 1px 6px; border-radius: 5px; color: var(--ink-soft);
+  }
+
+  pre.code {
+    background: var(--code-bg); color: var(--code-ink); font-family: var(--mono);
+    font-size: 13.5px; padding: 18px 20px; border-radius: 10px; overflow-x: auto;
+    text-align: left; line-height: 1.7; margin-top: 22px;
+  }
+  pre.code .c { color: #9CA3AF; }
+  pre.code .k { color: #7DD3FC; }
+  pre.code .s { color: #86EFAC; }
+  .prompt::before { content: "$ "; color: #6EE7B7; }
+
+  /* ---------- sections ---------- */
+  section { padding: 72px 0; border-top: 1px solid var(--line); background: var(--paper); }
+  section.alt { background: var(--bg); }
+  h2 { font-size: 30px; letter-spacing: -0.015em; font-weight: 800; margin-bottom: 12px; }
+  .lead { font-size: 17px; color: var(--ink-soft); max-width: 720px; margin-bottom: 40px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; }
+  .card {
+    background: var(--paper); border: 1px solid var(--line); border-radius: 12px; padding: 24px;
+  }
+  section.alt .card { background: #fff; }
+  .card h3 { font-size: 17px; font-weight: 700; margin-bottom: 8px; display: flex; align-items: center; gap: 8px; }
+  .card p { font-size: 15px; color: var(--ink-soft); }
+  .card .mono { font-family: var(--mono); font-size: 13px; color: var(--green-dark); background: #ECFDF3; padding: 1px 6px; border-radius: 5px; }
+
+  .tree {
+    background: #F9FAFB; border: 1px solid var(--line); border-radius: 12px; padding: 24px 28px;
+    font-family: var(--mono); font-size: 14px; line-height: 1.9; overflow-x: auto; color: var(--ink);
+  }
+  .tree b { color: var(--ink); font-weight: 600; }
+  .tree .dim { color: var(--ink-faint); }
+
+  .evidence { background: #F0FDF4; border: 1px solid #BBF7D0; border-radius: 12px; padding: 28px; margin-top: 28px; }
+  .evidence h3 { font-size: 18px; margin-bottom: 12px; }
+  .evidence p { font-size: 15px; color: var(--ink); }
+  .evidence p + p { margin-top: 12px; }
+
+  .steps { counter-reset: step; list-style: none; display: grid; gap: 16px; margin-top: 8px; }
+  .steps li {
+    display: grid; grid-template-columns: 34px 1fr; gap: 14px; align-items: start;
+  }
+  .steps li::before {
+    counter-increment: step; content: counter(step); width: 34px; height: 34px;
+    background: var(--green); color: #fff; border-radius: 50%; font-weight: 700;
+    display: grid; place-items: center; font-size: 15px; margin-top: 2px;
+  }
+  .steps b { display: block; font-size: 16px; }
+  .steps span { font-size: 14.5px; color: var(--ink-soft); }
+  .steps code {
+    font-family: var(--mono); font-size: 13px; background: #ECFDF3; color: var(--green-dark);
+    padding: 1px 6px; border-radius: 5px;
+  }
+
+  .badges { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; margin-top: 28px; }
+  .badge {
+    border: 1px solid var(--line); background: var(--paper); border-radius: 999px;
+    padding: 6px 14px; font-size: 13px; font-weight: 500; color: var(--ink-soft);
+  }
+
+  /* ---------- footer ---------- */
+  footer { padding: 44px 0; text-align: center; border-top: 1px solid var(--line); }
+  footer p { color: var(--ink-faint); font-size: 14px; }
+  footer .links { display: flex; gap: 22px; justify-content: center; margin-bottom: 14px; }
+  footer .links a { color: var(--ink-soft); text-decoration: none; font-size: 14px; font-weight: 500; }
+  footer .links a:hover { color: var(--green); }
+
+  @media (max-width: 640px) {
+    .hero h1 { font-size: 32px; }
+    .hero { padding: 56px 0 48px; }
+    section { padding: 48px 0; }
+    .nav-links a:not(.cta) { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap nav">
+    <a class="nav-brand" href="#">
+      <img src="docs/assets/ugraph-logo.svg" alt="ugraph logo">
+      ugraph
+    </a>
+    <nav class="nav-links">
+      <a href="#how">How it works</a>
+      <a href="#structure">Structure</a>
+      <a href="#evidence">Evidence</a>
+      <a href="#contribute">Contribute</a>
+      <a href="https://github.com/saran-io/ugraph" class="cta">GitHub</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <div class="hero wrap">
+    <img class="logo" src="docs/assets/ugraph-logo.svg" alt="ugraph logo">
+    <h1>Build verifiable knowledge<br>from the sources <span>you trust</span>.</h1>
+    <p class="tagline">
+      YouTube sources &amp; text → <strong>plain Markdown</strong> → an agent-navigable graph
+      with <strong>citations you can check</strong>. No database. No vector store.
+      <strong>No API key required.</strong>
+    </p>
+    <div class="install">
+      <a class="primary" href="https://github.com/saran-io/ugraph#install">Get started</a>
+      <span class="alt">or install directly — <code>uv tool install ugraph-kit</code></span>
+    </div>
+    <pre class="code"><span class="prompt"></span><span class="k">cd</span> ~/MyVault
+<span class="prompt"></span>ugraph init
+<span class="prompt"></span>ugraph ingest youtube <span class="s">https://youtube.com/@SomeChannel</span> --limit 50
+<span class="prompt"></span>ugraph index <span class="c"># regenerate navigation</span>
+<span class="prompt"></span>ugraph lint  <span class="c"># conformance gate — must be 0 errors</span>
+<span class="prompt"></span>ugraph verify <span class="c"># every quote verbatim? every timestamp real?</span></pre>
+    <div class="badges">
+      <span class="badge">Open source · MIT</span>
+      <span class="badge">Python 3.10–3.13</span>
+      <span class="badge">Obsidian-native</span>
+      <span class="badge">Local-first</span>
+      <span class="badge">Alpha</span>
+    </div>
+  </div>
+
+  <section id="how">
+    <div class="wrap">
+      <h2>Verification is the point.</h2>
+      <p class="lead">
+        A knowledge base is only worth as much as your willingness to trust it.
+        So <code>ugraph verify</code> checks that <strong>every quote is a literal substring of its
+        transcript</strong> and every timestamp is real. Everything else is plumbing.
+      </p>
+      <div class="grid">
+        <div class="card">
+          <h3>Concepts, not summaries</h3>
+          <p>Ten talks about one idea produce <em>one</em> concept page citing ten sources.
+          The merge across sources is the entire value — and the hard part.</p>
+        </div>
+        <div class="card">
+          <h3>Files are the source of truth</h3>
+          <p>Markdown + YAML frontmatter + relative links. You can read it, <code>git diff</code>
+          it, grep it, and edit a page by hand at 2am — nothing needs re-indexing.</p>
+        </div>
+        <div class="card">
+          <h3>No model required to run</h3>
+          <p>Ingesting, indexing, linting, verifying and the graph are deterministic Python.
+          Turning transcripts into concepts is the one step that needs a model —
+          Claude Code, an API key, or a free local Ollama model.</p>
+        </div>
+        <div class="card">
+          <h3>A ~230-page base ≈ 64 KB of JSON</h3>
+          <p>Small enough to hand a model the entire graph instead of teaching it a query
+          language.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="structure" class="alt">
+    <div class="wrap">
+      <h2>Seven directories. That's the whole format.</h2>
+      <p class="lead">
+        A knowledge base is a folder you could have created by hand — and an agent can
+        navigate it by following links, not by talking to a database.
+      </p>
+      <div class="tree">
+<pre>knowledge/
+├── index.md          <span class="dim">the entry point — an agent starts here and follows links</span>
+├── concepts/         <span class="dim">ideas, synthesized across every source that taught them</span>
+├── entities/         <span class="dim">the people, companies and tools those ideas belong to</span>
+├── sources/          <span class="dim">one page per talk: what it covered, what it contributed</span>
+├── raw/              <span class="dim">transcripts. Immutable. Never edited, never hand-written</span>
+├── _mocs/            <span class="dim">hand-curated maps of content, when you want a reading order</span>
+├── SCHEMA.md         <span class="dim">the rules, in the repo, readable by you and by an agent</span>
+└── taxonomy.json     <span class="dim">your closed vocabulary — domains, source types, subtypes</span></pre>
+      </div>
+      <div class="evidence" id="evidence">
+        <h3>Does the check actually catch anything? Yes.</h3>
+        <p>
+          Running <code>ugraph verify</code> over 385 pages found <strong>11 defects</strong> — ten were the
+          small ways a quote quietly stops being a quote (an editor writing "because" where
+          the speaker said "cuz", a period the speaker never paused for), and the eleventh was
+          a sentence nobody said, wearing quotation marks.
+        </p>
+        <p>
+          Every one of those was invisible to reading. That is the argument for a mechanical
+          check: not that you are careless, but that this particular error is undetectable by
+          care.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <section id="contribute">
+    <div class="wrap">
+      <h2>Build it with us.</h2>
+      <p class="lead">
+        ugraph is open source (MIT). The repo is small, the tests run in under a second,
+        and the highest-value contribution is adding a source adapter — any adapter that
+        writes the same two files inherits lint, verify, ledger, graph and status for free.
+      </p>
+      <ol class="steps">
+        <li>
+          <b>Clone and install</b>
+          <span><code>git clone https://github.com/saran-io/ugraph</code> · <code>uv venv</code> · <code>uv pip install -e ".[dev]"</code></span>
+        </li>
+        <li>
+          <b>Run the tests</b>
+          <span><code>uv run pytest</code> &amp; <code>uv run ruff check src/ tests/</code> — under a second, no network.</span>
+        </li>
+        <li>
+          <b>Pick a good first issue</b>
+          <span>RSS is the most-wanted source adapter. Read <code>CONTRIBUTING.md</code> first — it explains the two rules worth understanding before changing anything.</span>
+        </li>
+        <li>
+          <b>Open a PR</b>
+          <span>CI tests on Python 3.10–3.13 and verifies both the sdist and wheel install and run.</span>
+        </li>
+      </ol>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="links">
+    <a href="https://github.com/saran-io/ugraph">GitHub</a>
+    <a href="https://github.com/saran-io/ugraph/blob/main/README.md">README</a>
+    <a href="https://github.com/saran-io/ugraph/blob/main/CONTRIBUTING.md">Contributing</a>
+    <a href="https://github.com/saran-io/ugraph/issues">Issues</a>
+  </div>
+  <p>ugraph · open source · MIT · built locally, verified mechanically</p>
+</footer>
+
+</body>
+</html>
