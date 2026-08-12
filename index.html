@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>ugraph — build verifiable knowledge from the sources you trust</title>
-<meta name="description" content="ugraph is an open-source CLI that turns YouTube and text sources into a plain-markdown knowledge base and graph for agents — with every quote mechanically verified against the source.">
+<meta name="description" content="ugraph is an open-source CLI that turns any input — clipboard, paste, pipe, file, or URL — into a plain-markdown knowledge base and graph for agents, with every quote mechanically verified against the source.">
 <link rel="icon" type="image/svg+xml" href="docs/assets/ugraph-logo.svg">
 <style>
   :root {
@@ -167,9 +167,9 @@
     <img class="logo" src="docs/assets/ugraph-logo.svg" alt="ugraph logo">
     <h1>Build verifiable knowledge<br>from the sources <span>you trust</span>.</h1>
     <p class="tagline">
-      YouTube sources &amp; text → <strong>plain Markdown</strong> → an agent-navigable graph
+      Any CLI input → <strong>plain Markdown</strong> → an agent-navigable graph
       with <strong>citations you can check</strong>. No database. No vector store.
-      <strong>No API key required.</strong>
+      <strong>Local-first. Any input.</strong>
     </p>
     <div class="install">
       <a class="primary" href="https://github.com/saran-io/ugraph#install">Get started</a>
@@ -177,10 +177,11 @@
     </div>
     <pre class="code"><span class="prompt"></span><span class="k">cd</span> ~/MyVault
 <span class="prompt"></span>ugraph init
-<span class="prompt"></span>ugraph ingest youtube <span class="s">https://youtube.com/@SomeChannel</span> --limit 50
+<span class="prompt"></span>ugraph <span class="c"># clipboard / paste / pipe / file / URL</span>
+<span class="prompt"></span>ugraph ingest file ./note.md
 <span class="prompt"></span>ugraph index <span class="c"># regenerate navigation</span>
 <span class="prompt"></span>ugraph lint  <span class="c"># conformance gate — must be 0 errors</span>
-<span class="prompt"></span>ugraph verify <span class="c"># every quote verbatim? every timestamp real?</span></pre>
+<span class="prompt"></span>ugraph verify <span class="c"># every quote verbatim?</span></pre>
     <div class="badges">
       <span class="badge">Open source · MIT</span>
       <span class="badge">Python 3.10–3.13</span>
